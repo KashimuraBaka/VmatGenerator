@@ -1,0 +1,13 @@
+"Layer0"
+{
+	"shader"	"sky.vfx"
+	"F_TEXTURE_FORMAT2"	"1"
+	"g_flBrightnessExposureBias"	"0"
+	"g_flRenderOnlyExposureBias"	"0"
+	"SkyTexture"	"materials/skybox/_placeholder.exr"
+	"Compiled Textures"	""
+	"Attributes"
+	{
+		"mapbuilder.sky"	"1"
+	}
+}

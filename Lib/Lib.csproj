@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <RootNamespace>Lib</RootNamespace>
+    <AssemblyName>Lib</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      ValveKeyValue (ValveResourceFormat) is the official Valve-format reader/writer used
+      to round-trip every VMAT file we emit. The KV1 text format matches Source 2 VMAT.
+      Dependency-free and targets net10.0 so it slots in without bringing extra packages.
+    -->
+    <PackageReference Include="ValveKeyValue" Version="0.71.0.528" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Per-shader "factory default" VMAT templates rendered by ShaderTemplateEmitter at
+      build time. Embedded so the library always has at least one synthesised baseline
+      even when no materials/ folder is reachable.
+    -->
+    <EmbeddedResource Include="Templates\*.vmat" />
+  </ItemGroup>
+
+</Project>

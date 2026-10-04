@@ -1,0 +1,37 @@
+"Layer0"
+{
+	"shader"	"csgo_character.vfx"
+	"g_bFogEnabled"	"1"
+	"g_nScaleTexCoordUByModelScaleAxis"	"0"
+	"g_nScaleTexCoordVByModelScaleAxis"	"0"
+	"g_nTextureAddressModeU"	"0"
+	"g_nTextureAddressModeV"	"0"
+	"g_flAmbientOcclusionMasking"	"0.4"
+	"g_flModelTintAmount"	"1"
+	"g_flTexCoordRotation"	"0"
+	"g_vColorTint"	"[1.000000 1.000000 1.000000 0.000000]"
+	"g_vTexCoordCenter"	"[0.500000 0.500000 0.000000 0.000000]"
+	"g_vTexCoordOffset"	"[0.000000 0.000000 0.000000 0.000000]"
+	"g_vTexCoordScale"	"[1.000000 1.000000 0.000000 0.000000]"
+	"g_vTexCoordScrollSpeed"	"[0.000000 0.000000 0.000000 0.000000]"
+	"TextureRimMask"	"[1.000000 1.000000 1.000000 0.000000]"
+	"TextureAmbientOcclusion"	"materials/default/default_ao.tga"
+	"TextureColor"	"materials/_placeholder/color.png"
+	"TextureMetalness"	"materials/default/default_metal.tga"
+	"TextureCloth"	"materials/_placeholder/cloth.png"
+	"TextureNormal"	"materials/default/default_normal.tga"
+	"TextureRoughness"	"materials/default/default_7be61377_rough.png"
+	"Compiled Textures"
+	{
+		"g_tAmbientOcclusion"	"materials/default/default_ao.tga.vtex"
+		"g_tColor"	"materials/_placeholder/color.png.vtex"
+		"g_tMetalness"	"materials/default/default_metal.tga.vtex"
+		"g_tCloth"	"materials/_placeholder/cloth.png.vtex"
+		"g_tNormal"	"materials/default/default_normal.tga.vtex"
+		"g_tRoughness"	"materials/default/default_7be61377_rough.png.vtex"
+	}
+	"Attributes"
+	{
+		"mapbuilder.character"	"1"
+	}
+}

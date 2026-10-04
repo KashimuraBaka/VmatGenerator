@@ -1,0 +1,20 @@
+"Layer0"
+{
+	"shader"	"generic.vfx"
+	"F_UNLIT"	"1"
+	"g_bFogEnabled"	"1"
+	"g_vColorTint"	"[1.000000 1.000000 1.000000 0.000000]"
+	"TextureColor"	"materials/tools/_placeholder.png"
+	"Compiled Textures"
+	{
+		"g_tColor"	"materials/tools/_placeholder.png.vtex"
+	}
+	"Attributes"
+	{
+		"mapbuilder.nodraw"	"1"
+		"mapbuilder.playerclip"	"1"
+		"mapbuilder.sky"	"1"
+		"mapbuilder.visblocker"	"1"
+		"tools.toolsmaterial"	"1"
+	}
+}

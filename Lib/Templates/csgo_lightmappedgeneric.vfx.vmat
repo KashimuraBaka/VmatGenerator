@@ -1,0 +1,46 @@
+"Layer0"
+{
+	"shader"	"csgo_lightmappedgeneric.vfx"
+	"F_DETAILTEXTURE"	"1"
+	"F_SPECULAR_DIRECT"	"1"
+	"F_SPECULAR_INDIRECT"	"1"
+	"F_TRANSLUCENT"	"1"
+	"g_bFogEnabled"	"1"
+	"g_nTextureAddressModeU"	"0"
+	"g_nTextureAddressModeV"	"0"
+	"g_flMetalness"	"0"
+	"g_flModelTintAmount"	"1"
+	"g_flOpacityScale"	"1"
+	"g_flVertexColorOpacityScale"	"1"
+	"g_vColorTint"	"[1.000000 1.000000 1.000000 0.000000]"
+	"g_vLayer1DetailScale"	"[4.000000 4.000000 0.000000 0.000000]"
+	"g_vLayer1DetailTintAndBlend"	"[1.000000 1.000000 1.000000 1.000000]"
+	"g_vLayer1Tint"	"[1.000000 1.000000 1.000000 0.000000]"
+	"TextureLayer1Color"	"materials/_placeholder/color.png"
+	"TextureLayer1AmbientOcclusion"	"materials/default/default_ao.tga"
+	"TextureLayer1Detail"	"materials/default/default_detail.tga"
+	"TextureLayer1Normal"	"materials/default/default_normal.tga"
+	"TextureLayer1Roughness"	"materials/default/default_7be61377_rough.png"
+	"TextureLayer1Translucency"	"materials/default/default_white.png"
+	"Compiled Textures"
+	{
+		"g_tColor"	"materials/_placeholder/color.png.vtex"
+		"g_tLayer1AmbientOcclusion"	""
+		"g_tLayer1Detail"	""
+		"g_tLayer1NormalRoughness"	""
+		"g_tAmbientOcclusion"	"materials/default/default_ao.tga.vtex"
+		"g_tDetail"	"materials/default/default_detail.tga.vtex"
+		"g_tNormal"	"materials/default/default_normal.tga.vtex"
+		"g_tRoughness"	"materials/default/default_7be61377_rough.png.vtex"
+		"g_tTranslucency"	"materials/default/default_white.png.vtex"
+	}
+	"SystemAttributes"
+	{
+		"PhysicsSurfaceProperties"	"tile"
+		"LightMapTextureName"	"materials/_placeholder/lightmap.vtex"
+	}
+	"Attributes"
+	{
+		"mapbuilder.lightmap"	"1"
+	}
+}
