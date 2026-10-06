@@ -14,15 +14,9 @@
         程序集，无需任何第三方 Fluent UI 库，也无需手动合并资源字典。
     -->
     <Application.Resources>
-        <ResourceDictionary>
-            <!--
-                合并的参数行模板字典。模板内部用到的转换器（BoolToVisibility /
-                BoolToOnOff / StringNonEmptyToVisibility）已在 ParameterTemplates.xaml
-                内部声明 —— 被合并的字典无法 StaticResource 引用本层的资源。
-            -->
-            <ResourceDictionary.MergedDictionaries>
-                <ResourceDictionary Source="Resources/ParameterTemplates.xaml" />
-            </ResourceDictionary.MergedDictionaries>
-        </ResourceDictionary>
+        <!--
+             主题资源全部来自 PresentationFramework.Fluent，由 ThemeMode="System" 自动合并；
+             旧的参数行模板字典已随参数编辑器一起删除，这里不再需要本地资源。
+        -->
     </Application.Resources>
 </Application>

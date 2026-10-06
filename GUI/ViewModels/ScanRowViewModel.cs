@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Media.Imaging;
@@ -29,7 +29,7 @@ public sealed partial class ScanRowViewModel : ObservableObject
     {
         FilePath = filePath;
         MatchedSuffix = matchedSuffix;
-        Role = role;
+        _role = role;
         _groupName = groupName;
     }
 
@@ -45,11 +45,145 @@ public sealed partial class ScanRowViewModel : ObservableObject
     /// <summary>命中的归一化后缀，例如 <c>normal</c>；未命中时为空串。</summary>
     public string MatchedSuffix { get; }
 
-    /// <summary>命中的语义槽位。</summary>
-    public TextureRole Role { get; }
+    /// <summary>槽位下拉框的候选项；由 <see cref="UpdateRoleOptions"/> 按当前着色器填充。</summary>
+    /// <remarks>
+    /// <para><b>只有当前着色器真的有的参数键才是候选项。</b>
+    /// 给 <c>csgo_environment</c> 列出 FoamMask、给 <c>csgo_water_fancy</c> 列出
+    /// AmbientOcclusion 都没有意义：这些键在对应着色器里根本不存在，
+    /// 用户挑了只会得到一个写不进去的槽位。</para>
+    ///
+    /// <para><b>本行已选中的槽位永远在列表里。</b>换着色器会让一批已归类的行失去依据，
+    /// 静默清空等于替用户做决定，而留着又会被误读成「这个着色器支持」。
+    /// 所以额外补一项 <see cref="RoleOptionViewModel.IsSupported"/> 为假的候选，
+    /// 在下拉框与列表里都标出来（见 <see cref="SelectedRoleOption"/>）。</para>
+    /// </remarks>
+    public IReadOnlyList<RoleOptionViewModel> RoleOptions { get; private set; } = RoleOptionViewModel.None;
 
-    /// <summary>槽位的中文名，便于在列表里一眼看懂。</summary>
-    public string RoleDisplay => Role == TextureRole.Unknown ? "（未命中）" : Role.ToString();
+    /// <summary>
+    /// 下拉框当前选中的候选项；读写都经它，槽位本身仍以 <see cref="Role"/> 为准。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>为什么绑它而不是绑 Role。</b>换着色器会整批换掉候选项列表，
+    /// 组合框是拿项本身去新列表里找回选中的；绑裸枚举时它比不中，选中项被清成 -1、
+    /// 关闭态随即一片空白，读起来像这一行没加载出来。候选项共用共享实例
+    /// （<see cref="RoleOptionViewModel.Get"/>），同一个项在新旧两份列表里是同一个引用，比得中。</para>
+    ///
+    /// <para><b>setter 刻意忽略 null。</b>换列表的一瞬间组合框会因为「找不到原来的项」
+    /// 回写一次 null；照直写下去等于把用户的归类结果清空。真要取消归类应该取消
+    /// 「生成」勾选框，而不是靠一次着色器切换顺手做掉。</para>
+    /// </remarks>
+    public RoleOptionViewModel? SelectedRoleOption
+    {
+        get => Role == TextureRole.Unknown ? null : RoleOptionViewModel.Get(Role, IsSupportedRole(Role));
+        set
+        {
+            if (value is null || value.Role == Role) return;
+            Role = value.Role;
+        }
+    }
+
+    /// <summary>某个槽位是否在当前着色器的支持范围里。</summary>
+    private bool IsSupportedRole(TextureRole role)
+    {
+        foreach (var supported in _supportedRoles)
+        {
+            if (supported == role) return true;
+        }
+
+        return false;
+    }
+
+
+    /// <summary>
+    /// 按当前着色器支持的槽位重算下拉框候选项。换着色器时由列表的一方对每一行调用。
+    /// </summary>
+    /// <param name="supported">当前着色器支持的槽位（<see cref="TextureRole.Unknown"/> 会被跳过）。</param>
+    public void UpdateRoleOptions(IReadOnlyList<TextureRole> supported)
+    {
+        _supportedRoles = supported ?? Array.Empty<TextureRole>();
+        ReapplyRoleOptions();
+    }
+
+    /// <summary>最近一次算出的受支持槽位；改槽位时要据此重算候选项。</summary>
+    private IReadOnlyList<TextureRole> _supportedRoles = Array.Empty<TextureRole>();
+
+    /// <summary>
+    /// 按已记住的支持范围重算候选项；组合框展开时由界面调用。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>为什么不在槽位变更时就重算。</b>那等于在组合框处理选中回写的回调里
+    /// 换掉它的 ItemsSource，选中状态正处在中间态，用户点一下反而可能把槽位清空。</para>
+    /// <para><b>推迟到展开时也不会露出破绽。</b>关闭态显示的是当前选中项，它上一轮就被要保证
+    /// 存在于列表里。唯一可能过期的，是上一轮为「保住旧归类」补的那项不受支持候选——
+    /// 而它只在下拉面板展开时才看得见，在它被看见之前重算一次就够。</para>
+    /// <para>内容没变时不换列表：换一次面板里的容器会全部重建，光标与滚动位置都会丢。
+    /// 绝大多数展开并不需要重建。</para>
+    /// </remarks>
+    public void ReapplyRoleOptions()
+    {
+        var expected = BuildRoleOptions();
+        if (IsSameRoleOptions(RoleOptions, expected)) return;
+
+        RoleOptions = expected;
+        OnPropertyChanged(nameof(RoleOptions));
+        OnPropertyChanged(nameof(SelectedRoleOption));
+    }
+
+    /// <summary>
+    /// 算出应有的候选项：支持范围里的全部，加上当前槽位（若它不受支持）。
+    /// </summary>
+    /// <remarks>
+    /// 结果里最多只有一项不受支持，且恰好就是当前选中项。上一轮补的那项在用户改选别的槽位
+    /// 之后已经没有来由，留着会被读成「这个着色器支持它，但它有问题」。
+    /// </remarks>
+    private IReadOnlyList<RoleOptionViewModel> BuildRoleOptions()
+    {
+        var list = new List<RoleOptionViewModel>(_supportedRoles.Count + 1);
+        var contains = false;
+
+        foreach (var role in _supportedRoles)
+        {
+            if (role == TextureRole.Unknown) continue;
+            list.Add(RoleOptionViewModel.Get(role, true));
+            if (role == Role) contains = true;
+        }
+
+        // 着色器换掉之后，本行原来靠后缀猜出来的槽位可能已经不存在了。不能直接丢掉：
+        // 那等于替用户把归类结果清空，而且组合框找不到选中项会显示成空白，
+        // 读起来像「没加载出来」。补一项标注为「不支持」，让它继续可见并说明依据已失效。
+        if (!contains && Role != TextureRole.Unknown) list.Add(RoleOptionViewModel.Get(Role, false));
+
+        return list;
+    }
+
+    /// <summary>两份候选项是否等价：同序、同槽位、同支持标志。</summary>
+    private static bool IsSameRoleOptions(
+        IReadOnlyList<RoleOptionViewModel> left, IReadOnlyList<RoleOptionViewModel> right)
+    {
+        if (left.Count != right.Count) return false;
+        for (var i = 0; i < left.Count; i++)
+        {
+            if (left[i].Role != right[i].Role) return false;
+            if (left[i].IsSupported != right[i].IsSupported) return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// 该贴图命中的语义槽位，可在「槽位」列里手动改。
+    /// </summary>
+    /// <remarks>
+    /// 自动归类按后缀猜，猜错是常态：<c>_spec</c> 可能是粗糙度也可能是自发光，
+    /// 取决于材质本身。提供一个组合框把纠正成本从「改规则表 + 全量重扫」
+    /// 降到「这一行点两下」。
+    /// </remarks>
+    [ObservableProperty]
+    private TextureRole _role;
+
+    /// <summary>槽位的中文名 + 枚举名，便于在列表里一眼看懂且能与配置文件对上。</summary>
+    /// <remarks>中英并排的原因见 <see cref="TextureRoleTokens.DescribeBilingual"/>。</remarks>
+    public string RoleDisplay => Role == TextureRole.Unknown ? "（未命中）" : TextureRoleTokens.DescribeBilingual(Role);
 
     /// <summary>是否命中了可用的后缀规则。</summary>
     public bool IsMatched => Role != TextureRole.Unknown;
@@ -58,13 +192,35 @@ public sealed partial class ScanRowViewModel : ObservableObject
     [ObservableProperty]
     private bool _include;
 
+    /// <summary>槽位被手动改过时触发，由 <see cref="MainViewModel"/> 刷新材质预览。</summary>
+    /// <remarks>
+    /// 槽位决定 .vmat 里写哪个参数键，改动会直接反映到生成的材质上，
+    /// 预览不跟着刷新的话，用户看到的就是一份与实际写入不一致的内容。
+    /// </remarks>
+    public event Action? RoleChanged;
+
+    /// <summary>由生成器挂接 <see cref="Role"/> 的属性变更通知。</summary>
+    partial void OnRoleChanged(TextureRole value)
+    {
+        OnPropertyChanged(nameof(RoleDisplay));
+        OnPropertyChanged(nameof(IsMatched));
+        OnPropertyChanged(nameof(SelectedRoleOption));
+
+        // 从「未命中」改成具体槽位时自动勾上「生成」。
+        // 这一行当初没被选中，正是因为它没归类；用户现在明说了它属于哪个槽位，
+        // 留着不勾等于让这次修改悄无声息地失效。
+        if (value != TextureRole.Unknown) Include = true;
+
+        RoleChanged?.Invoke();
+    }
+
     private string _groupName;
 
     /// <summary>
     /// 归属的 <c>.vmat</c> 名（不含扩展名）。用户可手动改。
     /// </summary>
     /// <remarks>
-    /// 改动会触发 <see cref="GroupChanged"/>，由 <see cref="QuickNavViewModel"/> 重新聚合分组预览。
+    /// 改动会触发 <see cref="GroupChanged"/>，由 <see cref="MainViewModel"/> 重新聚合分组预览。
     /// </remarks>
     [ObservableProperty]
     private string? _groupNameOverride;

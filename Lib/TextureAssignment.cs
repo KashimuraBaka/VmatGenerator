@@ -144,7 +144,7 @@ public sealed class TextureAssignResult
 ///
 /// <para><b>纯函数、无副作用。</b>只读取入参与内存中的规则表，不写任何文件、不改全局状态、
 /// 不触碰当前编辑器。相同入参恒等出参，因此可以直接单测与推理；GUI 拿到结果后自行决定
-/// 是否调用 <c>ShaderEditorViewModel.TrySetTextureValue</c>。</para>
+/// 如何把胜者贴图填进对应槽位（现为快速导航的扫描表格）。</para>
 ///
 /// <para><b>处理流水线。</b></para>
 /// <list type="number">

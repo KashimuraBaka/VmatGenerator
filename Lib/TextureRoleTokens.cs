@@ -61,6 +61,23 @@ public static class TextureRoleTokens
     /// <returns>中文名；未知值返回枚举名本身。</returns>
     public static string Describe(TextureRole role) =>
         Map.TryGetValue(role, out var info) ? info.Display : role.ToString();
+    /// <summary>
+    /// 取某个角色的「中文名（枚举名）」双语文本，供需要两者并存的界面使用。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>为什么两个都要。</b>中文名是给人读的，枚举名是与配置文件、规则表
+    /// 对得上的唯一标识。翻译本身是有歧义的——<c>Metalness</c> 译成「金属度」还是
+    /// 「金属性」、<c>Mask</c> 译成「遮罩」还是「掩模」，不同文档并不一致。
+    /// 只给中文，用户按文档核对时会以为程序认错了角色；只给英文，中文用户又要逐个猜。
+    /// 两个都摆出来，对错当场可见。</para>
+    ///
+    /// <para>格式固定为 <c>中文名 (枚举名)</c>：括号里放的是<b>枚举名本身</b>，
+    /// 不是参数键。参数键带 Texture 前缀且按着色器分档，与角色并非一一对应，
+    /// 混排反而更容易看错。</para>
+    /// </remarks>
+    /// <param name="role">待查询的角色。</param>
+    /// <returns>形如 <c>环境光遮蔽 (AmbientOcclusion)</c> 的双语文本。</returns>
+    public static string DescribeBilingual(TextureRole role) => $"{Describe(role)} ({role})";
 
     /// <summary>
     /// 大小写不敏感地把用户输入 / JSON 文本解析为 <see cref="TextureRole"/>。

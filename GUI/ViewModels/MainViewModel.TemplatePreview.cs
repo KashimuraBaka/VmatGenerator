@@ -1,17 +1,17 @@
-using System.Text;
+﻿using System.Text;
 using GUI.Diagnostics;
 using Lib;
 
 namespace GUI.ViewModels;
 
 /// <summary>
-/// <see cref="QuickNavViewModel"/> 的右列「KeyValues 模板预览」实现。
+/// <see cref="MainViewModel"/> 的右列「KeyValues 模板预览」实现。
 ///
-/// <para>单独成文件而非并入 <see cref="QuickNavViewModel"/> 主体，是为了把这个
+/// <para>单独成文件而非并入 <see cref="MainViewModel"/> 主体，是为了把这个
 /// 「渲染 + 文本标注」的关注点与规则表的增删改逻辑分开；类本身是
 /// <c>partial</c>，成员与主体完全同级。</para>
 /// </summary>
-public sealed partial class QuickNavViewModel
+public sealed partial class MainViewModel
 {
     /// <summary>贴图参数行加用的中文前缀。</summary>
     private const string TexturePathPrefix = "路径：";

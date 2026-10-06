@@ -1,4 +1,7 @@
+﻿using System.Diagnostics;
+using System.IO;
 using System.Windows;
+using System.Windows.Input;
 using GUI.Diagnostics;
 using GUI.ViewModels;
 using Lib;
@@ -6,14 +9,14 @@ using Lib;
 namespace GUI;
 
 /// <summary>
-/// Code-behind for <see cref="MainWindow"/>.
+/// 主窗口 = <b>贴图快速导航</b>三步向导本体。
 ///
-/// 每个事件处理器都用 <see cref="ControlErrorRecorder.GuardWithDialog"/> 包住，
-/// 这样即使某个控件的逻辑抛异常，也只是记录 + 提示，不会让整个应用退出
-/// （修复前：任意未处理异常都会经 Dispatcher 冒泡并终止进程）。
+/// <para>旧主窗口的材质树 / 参数编辑器 / KV 预览 / 打开保存等全部删除后，
+/// 快速导航从模态对话框升格为唯一窗口；DataContext 由 XAML 直接建立
+/// （<c>Window.DataContext</c>），构造函数因此不再接受 ViewModel 参数。</para>
 ///
-/// 参数编辑器的输入过滤事件位于
-/// <see cref="GUI.Resources.ParameterTemplates"/>。
+/// <para>每个事件处理器都用 <see cref="ControlErrorRecorder"/> 包住：
+/// 即使某个控件的逻辑抛异常，也只是记录 + 提示，不会让整个应用退出。</para>
 /// </summary>
 public partial class MainWindow : Window
 {
@@ -21,19 +24,15 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
-        // 注意：这里<b>不</b>自动扫描任何目录。启动后保持空状态，由用户显式选择
-        // 「打开文件夹」—— 曾硬编码开发机路径自动加载，换台机器就完全不可用。
-        // 拖拽导入同样只响应用户的显式操作，不会在启动时读配置并自行扫描。
-
-        // 非阻塞的错误角标：任何控件出错都在状态栏提示，不弹模态框。
+        // 非阻塞的错误角标：任何控件出错都在底栏提示，不弹模态框。
         ErrorLog.EntryLogged += OnErrorLogged;
         Closed += (_, _) => ErrorLog.EntryLogged -= OnErrorLogged;
     }
 
-    /// <summary>主 ViewModel。公开是为了让「工具栏按钮」等绑定入口也能拿到它。</summary>
+    /// <summary>主 ViewModel（由 XAML 建立，这里只作类型化入口）。</summary>
     public MainViewModel ViewModel => (MainViewModel)DataContext;
 
-    /// <summary>错误发生时更新状态栏角标（非阻塞，避免连续弹窗淹没界面）。</summary>
+    /// <summary>错误发生时更新底栏角标（非阻塞，避免连续弹窗淹没界面）。</summary>
     private void OnErrorLogged(ErrorEntry entry)
     {
         try
@@ -46,145 +45,122 @@ public partial class MainWindow : Window
         }
         catch
         {
-            // 状态栏更新失败不影响错误记录本身。
+            // 角标更新失败不影响错误记录本身。
         }
     }
-
-    /// <summary>左侧树中材质条目的点击处理。</summary>
-    private void OnMaterialEntryClicked(object sender, RoutedEventArgs e)
+    /// <summary>缩略图双击：用系统默认程序打开原图。</summary>
+    /// <remarks>
+    /// <para><b>为什么不用 <c>MouseDoubleClick</c>。</b>那是 <see cref="System.Windows.Controls.Control"/>
+    /// 的事件，而 <see cref="System.Windows.Controls.Image"/> 直接继承
+    /// <see cref="FrameworkElement"/>，拿不到它。只能收
+    /// <see cref="MouseButtonEventArgs.ClickCount"/> 自己判定。</para>
+    ///
+    /// <para>文件可能在扫描之后被删掉或移走，因此先确认存在再交给外壳，
+    /// 否则 <see cref="Process.Start"/> 抛出的异常只会在日志里留一行，用户什么都看不到。</para>
+    /// </remarks>
+    private void OnThumbnailMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (sender is not FrameworkElement { Tag: MaterialEntryViewModel entry }) return;
-        var file = entry.DisplayName;
-        ControlErrorRecorder.GuardWithDialog($"打开材质「{file}」", sender,
-            () => ViewModel.EditMaterial(entry));
+        if (e.ClickCount != 2) return;
+        if (sender is not FrameworkElement { DataContext: ScanRowViewModel row }) return;
+
+        ControlErrorRecorder.GuardWithDialog("打开贴图", sender, () =>
+        {
+            if (!File.Exists(row.FilePath))
+            {
+                throw new FileNotFoundException(
+                    $"贴图已不存在，可能在扫描之后被移动或删除。\n\n{row.FilePath}", row.FilePath);
+            }
+
+            Process.Start(new ProcessStartInfo(row.FilePath) { UseShellExecute = true });
+        });
+
+        // 已消费：避免 DataGrid 再把这次双击当成「打开编辑」之类的默认行为。
+        e.Handled = true;
     }
 
     /// <summary>
-    /// 拖拽<b>进入</b>窗口：与 <see cref="OnWindowDragOver"/> 同样需要立刻给出
-    /// 「可接收 / 不可接收」的光标反馈，否则首次进入时鼠标指针仍是禁止样式。
+    /// 槽位组合框展开：先按当前槽位把候选项对齐一次，再让用户看见面板。
     /// </summary>
-    private void OnWindowDragEnter(object sender, DragEventArgs e) =>
-        ControlErrorRecorder.Guard("拖拽处理", this, () => UpdateDropHover(e, FileDropOf(e.Data)));
-
-    /// <summary>
-    /// 拖拽<b>悬停</b>：只判断「能不能接收」，不枚举文件、不做任何写入 ——
-    /// 枚举很贵，DragOver 在一次拖拽中会连续触发几十次。
-    /// </summary>
-    private void OnWindowDragOver(object sender, DragEventArgs e) =>
-        ControlErrorRecorder.Guard("拖拽处理", this, () => UpdateDropHover(e, FileDropOf(e.Data)));
-
-    /// <summary>拖拽<b>离开</b>窗口：仅清除悬停视觉反馈，不改任何状态。</summary>
-    private void OnWindowDragLeave(object sender, DragEventArgs e) =>
-        ControlErrorRecorder.Guard("拖拽处理", this, () => SetDropHover(false));
-
-    /// <summary>
-    /// 放下：把 <c>DragEventArgs</c> 里的路径数组原样交给
-    /// <see cref="MainViewModel.HandleDroppedPathsCommand"/>，分类与写入逻辑全在 ViewModel 里。
-    /// </summary>
-    private void OnWindowDrop(object sender, DragEventArgs e)
+    /// <remarks>
+    /// <para>换过一次着色器之后，某行可能带着一项「为保住旧归类而补的、不受支持」的候选。
+    /// 用户后来把这行改选成别的槽位，那一项就失去来由了，但它还留在列表里，
+    /// 展开时会读成「这个着色器支持它，只是它有问题」。</para>
+    ///
+    /// <para>之所以等到展开才对齐，而不是在槽位变更的回调里做：那时组合框正处在
+    /// 选中回写的中间态，此时换 ItemsSource 可能把槽位直接清空。
+    /// 详见 <see cref="ScanRowViewModel.ReapplyRoleOptions"/>。</para>
+    /// </remarks>
+    private void OnRoleDropDownOpened(object sender, EventArgs e)
     {
-        var ok = ControlErrorRecorder.Guard("拖拽处理", this, () =>
+        if (sender is not FrameworkElement { DataContext: ScanRowViewModel row }) return;
+        row.ReapplyRoleOptions();
+    }
+
+    /// <summary>拖拽<b>进入</b>与<b>悬停</b>共用：判定能否接收，并在合法时给出 Copy 光标。</summary>
+    /// <remarks>
+    /// 一次拖拽中 <c>DragOver</c> 会连续触发几十次，因此这里只读取
+    /// <see cref="DataFormats.FileDrop"/> 的存在性，不枚举内容、不调
+    /// <see cref="DropImportService.CanAccept"/>——后者要碰文件系统。
+    /// </remarks>
+    private void OnWindowDragOver(object sender, DragEventArgs e) =>
+        ControlErrorRecorder.Guard("拖入生成来源", this, () =>
         {
-            // 无论成功与否都要收起覆盖层，否则窗口上会永久留着一层高亮。
-            SetDropHover(false);
-
-            var paths = FileDropOf(e.Data);
-            if (paths is null)
-            {
-                // 非文件拖放（窗口内文字等）不拦截，交给默认行为。
-                e.Effects = DragDropEffects.None;
-                e.Handled = false;
-                return;
-            }
-
-            e.Effects = DragDropEffects.Copy;
-            ViewModel.HandleDroppedPathsCommand.Execute(paths);
+            e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop)
+                ? DragDropEffects.Copy
+                : DragDropEffects.None;
             e.Handled = true;
         });
 
-        if (!ok)
-        {
-            ControlErrorRecorder.Guard("拖拽失败提示", this,
-                () => ViewModel.StatusText = "拖拽导入失败，已跳过本次导入；详情见错误日志。");
-        }
-    }
-
-    /// <summary>
-    /// 悬停反馈的统一判定：拖拽数据里确实是文件时才允许复制光标，
-    /// 否则把事件放行给潜在的其它拖放源（不劫持非文件拖放）。
-    /// </summary>
-    private void UpdateDropHover(DragEventArgs e, string[]? fileDrop)
-    {
-        if (DropImportService.CanAccept(fileDrop))
-        {
-            e.Effects = DragDropEffects.Copy;
-            e.Handled = true;
-            SetDropHover(true);
-        }
-        else
+    /// <summary>拖拽离开窗口：清除悬停态。</summary>
+    private void OnWindowDragLeave(object sender, DragEventArgs e) =>
+        ControlErrorRecorder.Guard("拖入生成来源", this, () =>
         {
             e.Effects = DragDropEffects.None;
-            e.Handled = false;
-            SetDropHover(false);
-        }
-    }
+            e.Handled = true;
+        });
 
     /// <summary>
-    /// 从拖拽数据里取文件路径；不是文件拖放（或取不到）时返回 <c>null</c>。
-    /// 这里刻意自己取一次而不是用 <c>e.Data.GetDataPresent</c> 反复探测，
-    /// 避免在高频的 DragOver 里做多余的 COM 数据封送。
+    /// 放下：把文件 / 文件夹路径并入 <see cref="MainViewModel.AssetsRoot"/>。
     /// </summary>
-    private static string[]? FileDropOf(System.Windows.IDataObject? data)
-    {
-        try
+    /// <remarks>
+    /// 这里<b>只收集来源，不触发生成</b>。拖入即开始写盘属于破坏性动作：
+    /// 用户可能只是想换一个扫描目录，或者还没挑好着色器。
+    /// 走到第三步点「开始生成」才是提交。
+    /// </remarks>
+    private void OnWindowDrop(object sender, DragEventArgs e) =>
+        ControlErrorRecorder.Guard("拖入资产文件夹", this, () =>
         {
-            return data?.GetData(DataFormats.FileDrop) as string[];
-        }
-        catch
-        {
-            // 某些外部拖放源在 GetData 时会抛 —— 视为不可接收。
-            return null;
-        }
-    }
+            if (e.Data.GetData(DataFormats.FileDrop) is string[] paths && paths.Length > 0)
+            {
+                ViewModel?.AddDroppedPaths(paths);
+                e.Effects = DragDropEffects.Copy;
+            }
+            else
+            {
+                e.Effects = DragDropEffects.None;
+            }
+            e.Handled = true;
+        });
 
-    /// <summary>切换覆盖层可见性；视觉反馈失败绝不影响拖拽本身。</summary>
-    private void SetDropHover(bool hovering)
-    {
-        try
-        {
-            DropOverlay.Visibility = hovering ? Visibility.Visible : Visibility.Collapsed;
-        }
-        catch (Exception ex)
-        {
-            ErrorLog.Warn("拖拽悬停反馈", nameof(SetDropHover), ex);
-        }
-    }
+    /// <summary>点击步骤条回到第一步。生成中不允许跳走。</summary>
+    private void OnStep1Clicked(object sender, MouseButtonEventArgs e) =>
+        ViewModel?.GoToStep1Command.Execute(null);
 
-    /// <summary>工具 → 贴图后缀快速导航。</summary>
-    private void OnOpenQuickNavClicked(object sender, RoutedEventArgs e)
-    {
-        ControlErrorRecorder.GuardWithDialog("打开贴图后缀快速导航", sender,
-            () => new QuickNavWindow(ViewModel.QuickNav) { Owner = this }.ShowDialog());
-    }
+    /// <summary>点击步骤条跳到第二步；第一步没填齐时不放行。</summary>
+    private void OnStep2Clicked(object sender, MouseButtonEventArgs e) =>
+        ViewModel?.GoToStep2Command.Execute(null);
 
-    /// <summary>文件 → 退出。</summary>
-    private void OnExitClicked(object sender, RoutedEventArgs e)
-    {
-        ControlErrorRecorder.Guard("关闭窗口", sender, () => Close());
-    }
+    /// <summary>点击步骤条跳到第三步；前两步没满足时不放行。</summary>
+    private void OnStep3Clicked(object sender, MouseButtonEventArgs e) =>
+        ViewModel?.GoToStep3Command.Execute(null);
 
-    /// <summary>视图 → 按着色器过滤。</summary>
-    private void OnFilterMenuClicked(object sender, RoutedEventArgs e)
-    {
-        ControlErrorRecorder.GuardWithDialog("按着色器过滤", sender,
-            () => ViewModel.FilterByShaderCommand.Execute(null));
-    }
+
+    // ── 帮助菜单：诊断入口 ───────────────────────────────────────────────────
 
     /// <summary>帮助 → 贴图后缀自检。</summary>
     ///
-    /// <para>这是规格 §11 那 13 项契约（以及另外 18 项扩展用例）唯一的<b>永久可重跑入口</b>：
-    /// 在此之前它们只能靠一个一次性的 %TEMP% console 工程跑，而那个工程已被清理，
-    /// 导致规格里的自检清单事实上无人能验证。</para>
+    /// <para>这是规格 §11 那 13 项契约（以及另外 18 项扩展用例）唯一的<b>永久可重跑入口</b>。
+    /// 旧主窗口删除后若不把它搬过来，规格里的自检清单就事实上无人能验证。</para>
     ///
     /// <para><b>安全性：</b><see cref="TextureAssignmentSelfTest.Run"/> 内部的全部文件用例都在
     /// <c>Path.GetTempPath()</c> 下的独立沙箱中执行并在 finally 清理，
@@ -215,7 +191,7 @@ public partial class MainWindow : Window
         });
     }
 
-    /// <summary>帮助 → 打开错误日志。</summary>
+    /// <summary>帮助 → 打开错误日志（底栏错误角标同样走这里）。</summary>
     private void OnShowErrorLogClicked(object sender, RoutedEventArgs e)
     {
         ControlErrorRecorder.GuardWithDialog("打开错误日志窗口", sender,
@@ -227,7 +203,7 @@ public partial class MainWindow : Window
     {
         ControlErrorRecorder.GuardWithDialog("打开日志目录", sender, () =>
         {
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            Process.Start(new ProcessStartInfo
             {
                 FileName = ErrorLog.LogDirectory,
                 UseShellExecute = true,
@@ -240,7 +216,7 @@ public partial class MainWindow : Window
     {
         ControlErrorRecorder.GuardWithDialog("显示关于对话框", sender, () =>
             MessageBox.Show(
-                "VMAT 生成器 — 基于 WPF / .NET 10 Fluent UI 的 Source 2 VMAT 编辑工具。\n\n" +
+                "VMAT 生成器 — 基于 WPF / .NET 10 Fluent UI 的 Source 2 贴图→.vmat 快速导航生成器。\n\n" +
                 "由 Lib + CommunityToolkit.Mvvm 构建，\n" +
                 "解析采用 ValveKeyValue 三方库，单文件 framework-dependent 发布。\n" +
                 "界面主题使用 .NET 10 Desktop Runtime 内置的 Fluent 资源。\n\n" +

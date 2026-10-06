@@ -1,4 +1,4 @@
-using CommunityToolkit.Mvvm.ComponentModel;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
 using Lib;
 
 namespace GUI.ViewModels;
@@ -56,11 +56,11 @@ public sealed partial class TextureSuffixRuleViewModel : ObservableObject
     /// MultiBinding 子绑定——所以根因是 MultiBinding 的子绑定，不是祖先回溯本身
     /// （先前改成 <c>AncestorType={x:Type DataGrid}</c> 同样报错，已证伪）。</para>
     /// <para>改为持有宿主、走普通路径绑定，视觉树是否连通便不再影响结果；
-    /// <see cref="QuickNavViewModel.SelectedShader"/> 变化时由
+    /// <see cref="MainViewModel.SelectedShader"/> 变化时由
     /// <see cref="ObservableObject"/> 发出通知，所有行自动重算，无需手工同步。</para>
     /// <para>允许为 <c>null</c>（单元测试直接构造时）：转换器据此显示「未选着色器」占位。</para>
     /// </remarks>
-    public QuickNavViewModel? Owner { get; init; }
+    public MainViewModel? Owner { get; init; }
 
     /// <summary>归一化后的后缀（只读）：<c>TextureSuffixMatcher.NormalizeName(Suffix)</c>。</summary>
     public string NormalizedSuffix => Safe(() => TextureSuffixMatcher.NormalizeName(Suffix), Suffix);
@@ -76,7 +76,7 @@ public sealed partial class TextureSuffixRuleViewModel : ObservableObject
     public TextureSuffixRule ToRule() => new(Suffix, ParseRole(Role), Enabled);
 
     /// <summary>从配置里的规则构造界面行（载入配置时使用）。</summary>
-    public static TextureSuffixRuleViewModel FromRule(TextureSuffixRule rule, QuickNavViewModel? owner = null) =>
+    public static TextureSuffixRuleViewModel FromRule(TextureSuffixRule rule, MainViewModel? owner = null) =>
         new(rule.Suffix, rule.Role, rule.Enabled) { Owner = owner };
 
     /// <summary>枚举名 → 枚举；解析失败一律退回 <see cref="TextureRole.Unknown"/>。</summary>

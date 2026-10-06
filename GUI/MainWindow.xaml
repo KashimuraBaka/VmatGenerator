@@ -4,374 +4,678 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="clr-namespace:GUI.ViewModels"
-        xmlns:lib="clr-namespace:Lib;assembly=Lib"
-        xmlns:local="clr-namespace:GUI"
         mc:Ignorable="d"
-        Title="VMAT 生成器"
-        Height="780" Width="1280"
-        MinHeight="520" MinWidth="900"
+        Title="VmatGenerator · 贴图快速导航"
+        Width="1280" Height="900"
+        MinWidth="1060" MinHeight="820"
         Background="{DynamicResource ApplicationBackgroundBrush}"
         WindowStartupLocation="CenterScreen"
         AllowDrop="True"
-        DragEnter="OnWindowDragEnter"
         DragOver="OnWindowDragOver"
+        DragEnter="OnWindowDragOver"
         DragLeave="OnWindowDragLeave"
         Drop="OnWindowDrop">
-
+    <!-- 主窗口自己就是根：ViewModel 由 XAML 直接建立，不再由别的窗口 new 进来。 -->
     <Window.DataContext>
-        <vm:MainViewModel x:Name="RootVm" />
+        <vm:MainViewModel />
     </Window.DataContext>
-
-    <!--
-        顶部布局：菜单栏 + 工具栏 + 三栏网格（导航 | 编辑器 | 预览）。
-        所有控件均为 WPF 原生类型，Fluent 样式由 App.xaml 中的
-        ThemeMode="System" 自动提供（.NET 10 内置 Fluent 主题）。
-        图标字体使用 Windows 自带的 "Segoe Fluent Icons" / "Segoe MDL2 Assets"。
-    -->
     <Window.Resources>
-        <FontFamily x:Key="IconFont">Segoe Fluent Icons, Segoe MDL2 Assets, Segoe UI Symbol</FontFamily>
+        <!-- 所有单元格内容统一垂直 + 水平居中。
+             「后缀名」是编辑框、「语义槽位」是下拉框，二者默认会纵向拉伸到整行高度；
+             缩略图与复选框则会被顶到左上角。用 Cell 级样式一次覆盖全部列，
+             比逐列加 HorizontalAlignment / VerticalAlignment 更不容易漏。
+             居中不破坏长文件名的截断：DataGridCell 仍以可用宽度去测量内容，
+             TextBlock 的 TextTrimming 照常生效，只是把测量结果居中摆放。 -->
+        <Style TargetType="DataGridCell">
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+        </Style>
+        <!-- 当前步骤的高亮。刻意用本地画刷而不是 DynamicResource：
+             AccentFillColorDefaultBrush 这类主题键在本项目里并无定义（DynamicResource
+             解析不到只会静默变透明，不会报错），自己定义才能保证高亮一定显示得出来。 -->
+        <SolidColorBrush x:Key="StepActiveBrush" Color="#FF3A7BD9" Opacity="0.28" />
+        <!-- 步骤条：默认灰底，当前步骤高亮。未到过的步骤也可点击（向导允许跳回去改）。 -->
+        <Style x:Key="StepItemStyle" TargetType="Border">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Padding" Value="18,10" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Margin" Value="0,0,6,0" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding StepIndex}" Value="1">
+                    <Setter Property="Background" Value="{StaticResource StepActiveBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding StepIndex}" Value="2">
+                    <Setter Property="Background" Value="{StaticResource StepActiveBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding StepIndex}" Value="3">
+                    <Setter Property="Background" Value="{StaticResource StepActiveBrush}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
     </Window.Resources>
-
-    <Grid>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <!-- 菜单栏 -->
-            <RowDefinition Height="Auto" />
-            <!-- 工具栏 -->
-            <RowDefinition Height="*" />
-            <!-- 主体 -->
-            <RowDefinition Height="Auto" />
-            <!-- 状态栏 -->
-        </Grid.RowDefinitions>
-
-        <!-- ─── 菜单栏 ───────────────────────────────────────────────────── -->
-        <Menu Grid.Row="0" Background="Transparent">
-            <MenuItem Header="文件(_F)">
-                <MenuItem Header="新建 VMAT(_N)"   Command="{Binding NewVmatCommand}" InputGestureText="Ctrl+N" />
-                <MenuItem Header="打开文件夹(_O)…" Command="{Binding OpenFolderCommand}" InputGestureText="Ctrl+O" />
-                <Separator />
-                <MenuItem Header="保存(_S)"  Command="{Binding SaveCurrentCommand}" InputGestureText="Ctrl+S" />
-                <MenuItem Header="另存为(_A)…" Command="{Binding SaveAsCommand}" InputGestureText="Ctrl+Shift+S" />
-                <Separator />
-                <MenuItem Header="退出(_X)" Click="OnExitClicked" />
-            </MenuItem>
-            <MenuItem Header="编辑(_E)">
-                <MenuItem Header="复制 KV 文本(_C)" Command="{Binding Editor.CopyKvCommand}" InputGestureText="Ctrl+C" />
-                <MenuItem Header="刷新(_R)"         Command="{Binding RefreshCommand}" InputGestureText="F5" />
-            </MenuItem>
-            <MenuItem Header="视图(_V)">
-                <MenuItem Header="按着色器过滤(_S)…" x:Name="FilterMenuItem" Click="OnFilterMenuClicked" />
-                <MenuItem Header="清除过滤(_C)"      Command="{Binding ClearFilterCommand}" />
-            </MenuItem>
-            <MenuItem Header="工具(_T)">
-                <MenuItem Header="贴图后缀快速导航(_Q)" Click="OnOpenQuickNavClicked"
-                          InputGestureText="Ctrl+Q"
-                          ToolTip="配置生成着色器类型、贴图根目录与贴图后缀规则" />
-            </MenuItem>
+    <DockPanel>
+        <!-- 材质树/参数编辑器已随旧主窗口删除；这几项诊断入口是自检与日志唯一的 UI 入口，予以保留。 -->
+        <Menu DockPanel.Dock="Top">
             <MenuItem Header="帮助(_H)">
-                <MenuItem Header="贴图后缀自检(_S)…" Click="OnRunTextureSuffixSelfTest"
-                          ToolTip="重跑「后缀 → 语义槽位 → 着色器参数键」整条链路的可执行自检用例（不触碰本机 settings.json）" />
+                <MenuItem Header="贴图后缀自检" Click="OnRunTextureSuffixSelfTest"
+                          ToolTip="在临时目录里重跑后缀解析契约用例，不改动本机配置" />
+                <MenuItem Header="错误日志…" Click="OnShowErrorLogClicked" />
+                <MenuItem Header="打开日志目录" Click="OnOpenLogFolderClicked" />
                 <Separator />
-                <MenuItem Header="错误日志(_L)…" Click="OnShowErrorLogClicked" />
-                <MenuItem Header="打开日志目录(_F)…" Click="OnOpenLogFolderClicked" />
-                <Separator />
-                <MenuItem Header="关于(_A)…" Click="OnAboutClicked" />
+                <MenuItem Header="关于 VmatGenerator" Click="OnAboutClicked" />
             </MenuItem>
         </Menu>
-
-        <!-- ─── 工具栏 ────────────────────────────────────────────────── -->
-        <ToolBar Grid.Row="1" Background="Transparent">
-            <Button Command="{Binding NewVmatCommand}" ToolTip="新建 VMAT (Ctrl+N)">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="&#xE8A5;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" />
-                    <TextBlock Text="新建" Margin="6,0,0,0" VerticalAlignment="Center" />
-                </StackPanel>
-            </Button>
-            <Button Command="{Binding OpenFolderCommand}" ToolTip="打开文件夹 (Ctrl+O)">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="&#xE8B7;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" />
-                    <TextBlock Text="打开" Margin="6,0,0,0" VerticalAlignment="Center" />
-                </StackPanel>
-            </Button>
-            <Separator />
-            <Button Command="{Binding SaveCurrentCommand}" ToolTip="保存 (Ctrl+S)">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="&#xE74E;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" />
-                    <TextBlock Text="保存" Margin="6,0,0,0" VerticalAlignment="Center" />
-                </StackPanel>
-            </Button>
-            <Button Command="{Binding SaveAsCommand}" ToolTip="另存为 (Ctrl+Shift+S)">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="&#xE792;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" />
-                    <TextBlock Text="另存为…" Margin="6,0,0,0" VerticalAlignment="Center" />
-                </StackPanel>
-            </Button>
-            <Separator />
-            <Button Command="{Binding Editor.CopyKvCommand}" ToolTip="复制 KV 文本">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="&#xE8C8;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" />
-                    <TextBlock Text="复制 KV" Margin="6,0,0,0" VerticalAlignment="Center" />
-                </StackPanel>
-            </Button>
-            <Button Command="{Binding RefreshCommand}" ToolTip="刷新 (F5)">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="&#xE72C;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" />
-                    <TextBlock Text="刷新" Margin="6,0,0,0" VerticalAlignment="Center" />
-                </StackPanel>
-            </Button>
-            <Separator />
-            <Button Command="{Binding FilterByShaderCommand}" ToolTip="按着色器过滤">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="&#xE721;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" />
-                    <TextBlock Text="过滤" Margin="6,0,0,0" VerticalAlignment="Center" />
-                </StackPanel>
-            </Button>
-            <Button Command="{Binding ClearFilterCommand}" ToolTip="清除过滤">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="&#xE894;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" />
-                    <TextBlock Text="清除" Margin="6,0,0,0" VerticalAlignment="Center" />
-                </StackPanel>
-            </Button>
-            <Separator />
-            <!--
-                工具栏入口：绑定命令（与菜单项的 Click 只挂其一，避免 WPF 同时执行
-                Command 与 Click 而把对话框打开两次）。
-            -->
-            <Button Command="{Binding OpenQuickNavCommand}"
-                    ToolTip="贴图后缀快速导航：配置生成着色器类型与贴图后缀规则">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="&#xE713;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" />
-                    <TextBlock Text="快速导航" Margin="6,0,0,0" VerticalAlignment="Center" />
-                </StackPanel>
-            </Button>
-        </ToolBar>
-
-        <!-- ─── 三栏主体 ────────────────────────────────────────────────── -->
-        <Grid Grid.Row="2">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="320" MinWidth="240" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" MinWidth="360" />
-                <ColumnDefinition Width="Auto" />
-                <!-- KV 预览与编辑器同为 *：两者平分导航栏之外的宽度，预览因此占约半窗。
-                     MinWidth 保证窗口收窄到最小时等宽字体仍有可读宽度。 -->
-                <ColumnDefinition Width="*" MinWidth="280" />
-            </Grid.ColumnDefinitions>
-
-            <!-- 左：TreeView 风格的着色器分组 -->
-            <Border Grid.Column="0" Background="{DynamicResource LayerFillColorAltBrush}">
-                <DockPanel>
-                    <Grid DockPanel.Dock="Top" Margin="12,8">
+        <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />   <!-- 步骤条 -->
+            <RowDefinition Height="*" />      <!-- 步骤内容 -->
+            <RowDefinition Height="Auto" />   <!-- 底部导航 -->
+        </Grid.RowDefinitions>
+        <!-- ─── 步骤条 ────────────────────────────────────────────────────── -->
+        <Border Grid.Row="0" Padding="0,0,0,10">
+            <StackPanel Orientation="Horizontal">
+                <Border>
+                    <Border.Style>
+                        <Style TargetType="Border" BasedOn="{StaticResource StepItemStyle}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding StepIndex}" Value="1">
+                                    <Setter Property="Background" Value="{StaticResource StepActiveBrush}" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                    <StackPanel Orientation="Horizontal" Cursor="Hand" MouseLeftButtonUp="OnStep1Clicked">
+                        <TextBlock Text="①" FontSize="16" Margin="0,0,8,0" />
+                        <StackPanel>
+                            <TextBlock FontWeight="SemiBold" Text="选择目标" />
+                            <TextBlock FontSize="11" Opacity="0.7" Text="着色器 · 资产文件夹 · 项目文件夹" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+                <Border>
+                    <Border.Style>
+                        <Style TargetType="Border" BasedOn="{StaticResource StepItemStyle}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding StepIndex}" Value="2">
+                                    <Setter Property="Background" Value="{StaticResource StepActiveBrush}" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                    <StackPanel Orientation="Horizontal" Cursor="Hand" MouseLeftButtonUp="OnStep2Clicked">
+                        <TextBlock Text="②" FontSize="16" Margin="0,0,8,0" />
+                        <StackPanel>
+                            <TextBlock FontWeight="SemiBold" Text="扫描与归类" />
+                            <TextBlock FontSize="11" Opacity="0.7" Text="贴图列表 · 指定归属 · 预览" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+                <Border>
+                    <Border.Style>
+                        <Style TargetType="Border" BasedOn="{StaticResource StepItemStyle}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding StepIndex}" Value="3">
+                                    <Setter Property="Background" Value="{StaticResource StepActiveBrush}" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                    <StackPanel Orientation="Horizontal" Cursor="Hand" MouseLeftButtonUp="OnStep3Clicked">
+                        <TextBlock Text="③" FontSize="16" Margin="0,0,8,0" />
+                        <StackPanel>
+                            <TextBlock FontWeight="SemiBold" Text="生成" />
+                            <TextBlock FontSize="11" Opacity="0.7" Text="进度 · 当前工作" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </Border>
+        <!-- ─── 第一步：选择着色器与两个目录 ───────────────────────────────── -->
+        <Border Grid.Row="1">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding StepIndex}" Value="1">
+                            <Setter Property="Visibility" Value="Visible" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+            <Border Padding="16" CornerRadius="6" Background="{DynamicResource LayerFillColorAltBrush}">
+<Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />   <!-- 输入区 -->
+                        <RowDefinition Height="*" />      <!-- 贴图类型清单 -->
+                    </Grid.RowDefinitions>
+                    <StackPanel Grid.Row="0">
+                    <TextBlock FontWeight="SemiBold" FontSize="14" Text="第一步 · 选择目标" />
+                    <TextBlock Margin="0,4,0,14" FontSize="11" Opacity="0.7" TextWrapping="Wrap"
+                               Text="资产文件夹是扫描贴图的来源（可直接把文件夹拖进本窗口）；项目文件夹是 .vmat 的输出位置。贴图路径按相对资产根写入，因此两者可以分开。" />
+                    <TextBlock Text="目标着色器" FontWeight="SemiBold" />
+                    <ComboBox Margin="0,6,0,0" MinWidth="420" HorizontalAlignment="Left"
+                              ItemsSource="{Binding Shaders}"
+                              SelectedItem="{Binding SelectedShader, Mode=TwoWay}">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <TextBlock Margin="0,16,0,0" Text="资产文件夹（贴图来源）" FontWeight="SemiBold" />
+                    <Grid Margin="0,6,0,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="材质列表" FontWeight="SemiBold" FontSize="14"
-                                   VerticalAlignment="Center" />
-                        <TextBlock Grid.Column="1"
-                                   Text="{Binding ShaderGroups.Count, StringFormat='{}{0} 个着色器'}"
-                                   FontSize="11" Opacity="0.6" VerticalAlignment="Center" />
+                        <TextBox Grid.Column="0" Text="{Binding AssetsRoot, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+                        <Button Grid.Column="1" Margin="8,0,0,0" Padding="14,4"
+                                Content="浏览…" Command="{Binding BrowseAssetsCommand}" />
                     </Grid>
-                    <Grid DockPanel.Dock="Top" Margin="12,0,12,8">
+                    <TextBlock Margin="0,16,0,0" Text="项目文件夹（.vmat 输出位置）" FontWeight="SemiBold" />
+                    <Grid Margin="0,6,0,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <Grid Grid.Column="0">
-                            <TextBox x:Name="FilterInputBox"
-                                     Text="{Binding ShaderFilter, UpdateSourceTrigger=PropertyChanged}" />
-                            <TextBlock Text="按着色器名称过滤…"
-                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                                       IsHitTestVisible="False"
-                                       Margin="6,4,0,0"
-                                       VerticalAlignment="Center">
-                                <TextBlock.Style>
-                                    <!-- BasedOn 保留 Fluent 的 TextBlock 隐式样式（字号/字重/文本填充色） -->
-                                    <Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
-                                        <Setter Property="Visibility" Value="Collapsed" />
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding Text, ElementName=FilterInputBox}" Value="">
-                                                <Setter Property="Visibility" Value="Visible" />
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </TextBlock.Style>
-                            </TextBlock>
-                        </Grid>
-                        <Button Grid.Column="1" Margin="6,0,0,0"
-                                Command="{Binding FilterByShaderCommand}"
-                                ToolTip="应用过滤">
-                            <TextBlock Text="&#xE721;" FontFamily="{StaticResource IconFont}" />
-                        </Button>
+                        <TextBox Grid.Column="0" Text="{Binding ProjectRoot, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+                        <Button Grid.Column="1" Margin="8,0,0,0" Padding="14,4"
+                                Content="浏览…" Command="{Binding BrowseProjectCommand}" />
                     </Grid>
-                    <TreeView ItemsSource="{Binding ShaderGroups}"
-                              BorderThickness="0"
-                              Background="Transparent">
-                        <TreeView.ItemTemplate>
-                            <HierarchicalDataTemplate DataType="{x:Type vm:ShaderGroupViewModel}"
-                                                      ItemsSource="{Binding MaterialEntries}">
-                                <TextBlock Text="{Binding ShaderName}" FontWeight="SemiBold" />
-                                <HierarchicalDataTemplate.ItemTemplate>
-                                    <DataTemplate DataType="{x:Type vm:MaterialEntryViewModel}">
-                                        <Button Click="OnMaterialEntryClicked"
-                                                Tag="{Binding}"
-                                                HorizontalContentAlignment="Stretch"
-                                                Background="Transparent"
-                                                BorderThickness="0"
-                                                Padding="4,2">
-                                            <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="&#xE7C3;"
-                                                           FontFamily="{StaticResource IconFont}"
-                                                           Margin="0,0,8,0"
-                                                           VerticalAlignment="Center" />
-                                                <TextBlock Text="{Binding DisplayName}"
-                                                           VerticalAlignment="Center" />
-                                            </StackPanel>
-                                        </Button>
+                    <TextBlock Margin="0,16,0,0" FontSize="11" Opacity="0.7" TextWrapping="Wrap">
+                        <Run Text="递归扫描子文件夹：" />
+                        <Run Text="{Binding RecurseTextureFolders, Mode=OneWay}" FontWeight="SemiBold" />
+                    </TextBlock>
+</StackPanel>
+                    <!-- 该着色器需要几类贴图、每类可能的后缀名。
+                         这份清单只由着色器模板推出，与扫描无关，所以放在第一步：
+                         选完着色器就能定下「要认哪些后缀」，再据此去准备资产。
+                         之前它塞在第二步的工具条里，既放错了位置，
+                         又把工具条撑成一个什么都装的杂物间。 -->
+                    <Grid Grid.Row="1" Margin="0,16,0,0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+<TextBlock Grid.Row="0" FontWeight="SemiBold" TextWrapping="Wrap"
+                                   Text="{Binding InferredSummary}" />
+                        <StackPanel Grid.Row="1" Margin="0,8,0,8" Orientation="Horizontal">
+                            <TextBlock VerticalAlignment="Center" FontSize="11" Opacity="0.75"
+                                       Text="后缀可直接改，多个用 | 分隔；勾选的行参与本次扫描。" />
+                            <Button Margin="10,0,0,0" Padding="12,3" Content="把新增后缀加入规则表"
+                                    Command="{Binding ApplyInferredSuffixesCommand}"
+                                    ToolTip="把各行里规则表还没有的后缀并入规则表；点「保存设置」后写入注册表。不会覆盖你已经改过的内容。" />
+                        </StackPanel>
+                        <!-- 表头和数据行用的是同一套列宽，两处必须同步改，否则对不齐。
+                             表头放在 ScrollViewer 内部（而不是外面固定），
+                             这样内容被竖直滚动条挤窄的宽度与表头一致。 -->
+                        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+                            <StackPanel>
+                                <Grid Margin="10,0,10,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="36" />
+                                        <ColumnDefinition Width="150" />
+                                        <ColumnDefinition Width="180" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" FontSize="11" FontWeight="SemiBold" Opacity="0.7" Text="启用" />
+                                    <TextBlock Grid.Column="1" FontSize="11" FontWeight="SemiBold" Opacity="0.7" Text="贴图类型" />
+                                    <TextBlock Grid.Column="2" FontSize="11" FontWeight="SemiBold" Opacity="0.7" Text="参数键" />
+                                    <TextBlock Grid.Column="3" FontSize="11" FontWeight="SemiBold" Opacity="0.7" Text="贴图后缀（| 分隔，可直接改）" />
+                                    <TextBlock Grid.Column="4" Margin="0,0,4,0" HorizontalAlignment="Right"
+                                               FontSize="11" FontWeight="SemiBold" Opacity="0.7" Text="新增" />
+                                </Grid>
+                                <ItemsControl ItemsSource="{Binding InferredSuffixes}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Margin="0,0,0,4" Padding="10,7" CornerRadius="4"
+                                                BorderThickness="1"
+                                                BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="36" />
+                                                    <ColumnDefinition Width="150" />
+                                                    <ColumnDefinition Width="180" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <CheckBox Grid.Column="0" MinWidth="16" Margin="0,0,12,0"
+                                                          VerticalAlignment="Center"
+                                                          IsChecked="{Binding IsEnabled}"
+                                                          IsEnabled="{Binding HasSuffixes}"
+                                                          ToolTip="勾选后，这一行的后缀并入本次扫描" />
+                                                <TextBlock Grid.Column="1" VerticalAlignment="Center"
+                                                           FontWeight="SemiBold"
+                                                           Text="{Binding RoleDisplay, Mode=OneWay}" />
+                                                <TextBlock Grid.Column="2" VerticalAlignment="Center"
+                                                           FontSize="11" Opacity="0.6"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           Text="{Binding ParameterKey, Mode=OneWay}" />
+                                                <!-- 后缀可编辑。失焦或回车才提交，避免每敲一个字符就重扫一遍。
+                                                     竖线分隔是用户能直接打出来的符号，不用记特殊输入。 -->
+                                                <TextBox Grid.Column="3" Margin="0,0,8,0"
+                                                         VerticalAlignment="Center" FontSize="12"
+                                                         Text="{Binding SuffixText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                         ToolTip="这一类贴图认哪些后缀。多个后缀用 | 分隔，例如 _base | _diffuse | _null" />
+                                                <Border Grid.Column="4" Padding="6,1" CornerRadius="8"
+                                                        VerticalAlignment="Center"
+                                                        Background="{DynamicResource LayerFillColorDefaultBrush}">
+                                                    <Border.Style>
+                                                        <Style TargetType="Border">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding HasFreshSuffixes}" Value="True">
+                                                                    <Setter Property="Visibility" Value="Visible" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Border.Style>
+                                                    <TextBlock FontSize="10"
+                                                               Text="{Binding FreshCount, Mode=OneWay, StringFormat='新增 {0}'}" />
+                                                </Border>
+                                            </Grid>
+                                        </Border>
                                     </DataTemplate>
-                                </HierarchicalDataTemplate.ItemTemplate>
-                            </HierarchicalDataTemplate>
-                        </TreeView.ItemTemplate>
-                    </TreeView>
-                </DockPanel>
-            </Border>
-
-            <GridSplitter Grid.Column="1" Width="4" HorizontalAlignment="Stretch"
-                          Background="{DynamicResource DividerStrokeColorDefaultBrush}" />
-
-            <!-- 中：参数编辑器 -->
-            <Border Grid.Column="2" Padding="16" Background="{DynamicResource SolidBackgroundFillColorBaseBrush}">
-                <DockPanel>
-                    <Grid DockPanel.Dock="Top" Margin="0,0,0,8">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <StackPanel>
-                            <TextBlock Text="{Binding Editor.SelectedShaderDisplay}"
-                                       FontSize="18" FontWeight="SemiBold" />
-                            <TextBlock Text="{Binding Editor.MaterialFilePath}"
-                                       FontSize="11" Opacity="0.6"
-                                       TextTrimming="CharacterEllipsis" />
-                        </StackPanel>
-                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
-                            <Button Content="复制 KV" Command="{Binding Editor.CopyKvCommand}" />
-                            <Button Content="保存"   Command="{Binding SaveCurrentCommand}" Margin="6,0,0,0" />
-                        </StackPanel>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            </StackPanel>
+                        </ScrollViewer>
                     </Grid>
-
-                    <!-- 着色器信息与说明 -->
-                    <Border DockPanel.Dock="Top" Margin="0,0,0,12" Padding="12"
-                            Background="{DynamicResource LayerFillColorAltBrush}"
-                            CornerRadius="6">
-                        <StackPanel>
-                            <TextBlock Text="{Binding SelectedShaderTemplate.Description}"
-                                       TextWrapping="Wrap" FontSize="12"
-                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-                        </StackPanel>
+                </Grid>
+            </Border>
+        </Border>
+        <!-- ─── 第二步：扫描列表 + 右侧预览 ───────────────────────────────── -->
+        <Border Grid.Row="1">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding StepIndex}" Value="2">
+                            <Setter Property="Visibility" Value="Visible" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+<StackPanel Grid.Row="0" Margin="0,0,0,8">
+                    <!-- 扫描工具条。刻意用 ToolBar 而不是一摞手摆的 Border/StackPanel：
+                         工具条就该长工具条的样子，按钮天然等高、间距一致，
+                         将来加按钮只要再塞一个 Button，不必重排间距。 -->
+<ToolBar Padding="6,4" Background="Transparent">
+                        <!-- 换掉默认模板后，ItemsPresenter 会回退到竖向 StackPanel，
+                             按钮会竖着排、Separator 还会被拉满整行。面板必须显式给横向；ToolBarPanel 的 Orientation 默认继承 Panel 的竖向，也要一起写。 -->
+                        <ToolBar.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <ToolBarPanel Orientation="Horizontal" />
+                            </ItemsPanelTemplate>
+                        </ToolBar.ItemsPanel>
+                        <ToolBar.Template>
+                            <!-- 主题默认模板塞了两样这里用不上的东西：左侧 10px 的拖拽手柄
+                                 （ToolBarThumb，里面 3px 竖虚线）和右侧的溢出箭头。
+                                 手柄显式挂着主题 Style，资源键各主题还不一样，压不掉；
+                                 与其和它较劲，不如给一份只含 ItemsPresenter 的模板，
+                                 这样任何主题下都不会冒出来。 -->
+                            <ControlTemplate TargetType="ToolBar">
+                                <Border Background="{TemplateBinding Background}">
+                                    <ItemsPresenter />
+                                </Border>
+                            </ControlTemplate>
+                        </ToolBar.Template>
+                        <ToolBar.Resources>
+                            <!-- 分隔线给个明确模板：主题默认那条在浅色背景下几乎看不见。 -->
+                            <Style x:Key="{x:Static ToolBar.SeparatorStyleKey}" TargetType="Separator">
+                                <Setter Property="Margin" Value="7,4" />
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="Separator">
+                                            <Border Width="1"
+                                                    Background="{DynamicResource DividerStrokeColorDefaultBrush}" />
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </ToolBar.Resources>
+                        <Button Padding="12,3" Content="扫描资产文件夹"
+                                Command="{Binding ScanCommand}" />
+                        <Separator />
+                        <Button Padding="12,3" Content="按后缀重新扫描"
+                                Command="{Binding RescanCommand}"
+                                ToolTip="把第一步里推断出的、勾选中的新增后缀并入后重扫" />
+                        <Separator />
+                        <Button Padding="12,3" Content="还原自动归类"
+                                Command="{Binding ResetManualGroupsCommand}"
+                                ToolTip="清除所有手动指定的归属，回到按基名的自动分组" />
+                        <TextBlock Margin="16,0,0,0" VerticalAlignment="Center" FontWeight="SemiBold"
+                                   Text="第二步 · 扫描与归类" />
+                    </ToolBar>
+                    <TextBlock Margin="10,4,0,0" FontSize="11" Opacity="0.75"
+                               TextWrapping="Wrap" Text="{Binding ScanSummary}" />
+                </StackPanel>
+                <!-- 左：贴图列表；右：选中材质的 KeyValues3 预览 -->
+                <Grid Grid.Row="1" Margin="0,10,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="3*" MinWidth="640" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="2*" MinWidth="360" />
+                    </Grid.ColumnDefinitions>
+                    <DataGrid x:Name="ScanGrid" Grid.Column="0"
+                              ItemsSource="{Binding ScanRows}"
+                              SelectedItem="{Binding SelectedRow, Mode=TwoWay}"
+                              AutoGenerateColumns="False"
+                              CanUserAddRows="False"
+                              CanUserDeleteRows="False"
+                              SelectionMode="Single"
+                              SelectionUnit="FullRow"
+                              GridLinesVisibility="Horizontal"
+                              HeadersVisibility="Column"
+                              RowHeight="56"
+                              EnableRowVirtualization="True"
+                              VirtualizingPanel.IsVirtualizing="True"
+                              VirtualizingPanel.VirtualizationMode="Recycling"
+                              FontSize="12">
+                        <DataGrid.Columns>
+                            <DataGridTemplateColumn Header="生成" Width="46">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <CheckBox HorizontalAlignment="Center" VerticalAlignment="Center" Margin="3"
+                                                  IsChecked="{Binding Include, Mode=TwoWay}" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <!-- 缩略图直接绑 Thumbnail：该属性的 getter 会顺带发起解码，
+                                 解完再抛一次 PropertyChanged 把图填上。
+                                 配合 Recycling 虚拟化，只有滚进可视区的行才会被求值，
+                                 成千上万行也只解看得见的那些。
+                                 双击用系统默认程序打开原图。 -->
+                            <DataGridTemplateColumn Header="预览" Width="60">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Grid Width="48" Height="48" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                              Background="Transparent"
+                                              ToolTip="{Binding FilePath}">
+                                            <!-- Uniform = 整张缩到框内（适应大小），长宽比不变；
+                                                 之前用 UniformToFill 会裁掉边缘，
+                                                 而贴图往往正是靠边缘判断内容（法线的紫边、遮罩的构图）。 -->
+                                            <Image Stretch="Uniform"
+                                                   Source="{Binding Thumbnail}"
+                                                   MouseLeftButtonDown="OnThumbnailMouseLeftButtonDown" />
+                                            <TextBlock Text="?" FontSize="22" Opacity="0.35"
+                                                       HorizontalAlignment="Center"
+                                                       VerticalAlignment="Center"
+                                                       IsHitTestVisible="False">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding HasThumbnail}" Value="False">
+                                                                <Setter Property="Visibility" Value="Visible" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </Grid>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTemplateColumn Header="文件" Width="*" MinWidth="200">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <!-- 按参考文档的做法，对内容元素本身设对齐，而不是靠
+                                             DataGridCell 的 HorizontalContentAlignment（会被列自带的
+                                             ElementStyle / 模板根元素盖掉）。TextBlock 在 Measure 阶段
+                                             仍收到可用宽度作为约束，所以 TextTrimming 照常生效。 -->
+                                        <!-- 垂直 StackPanel 会忽略子元素的 VerticalAlignment，
+                                             只按顺序堆叠。垂直居中必须加在 StackPanel 自己身上。 -->
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       Text="{Binding FileName}" />
+                                            <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                       FontSize="10" Opacity="0.6"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       Text="{Binding RelativeDirectory}" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTemplateColumn Header="槽位" Width="214">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <!-- 未命中的行显示提示文案而不是空白：空白读起来像「没加载出来」。 -->
+                                        <Grid Margin="2">
+                                            <!-- 候选项由 MainViewModel 按当前着色器算好推给每一行：
+                                                 这个着色器没有的参数键根本不会出现在下拉框里。
+                                                 选中项绑 SelectedRoleOption（共享实例）而不是裸槽位：
+                                                 换着色器会整批换掉候选项，绑裸槽位时组合框在新列表里
+                                                 比不中选中项，关闭态随即一片空白，像该行没加载出来。 -->
+                                             <ComboBox HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                                                      FontSize="12"
+                                                      ItemsSource="{Binding RoleOptions}"
+                                                      SelectedItem="{Binding SelectedRoleOption, Mode=TwoWay}"
+                                                      ToolTip="{Binding SelectedRoleOption.Note}"
+                                                      DropDownOpened="OnRoleDropDownOpened">
+                                                <!-- 单行双语。关闭态与下拉态共用同一个模板：
+                                                     ComboBox.SelectionBoxItemTemplate 的 setter 是 internal，
+                                                     设不了，没法让关闭态单独排成两行省列宽。
+                                                     214px 装得下最长的「环境光遮蔽 (AmbientOcclusion)」
+                                                     （文本 177px + 内边距 + 下拉箭头），固定列合计 540px，
+                                                     窗口最窄 1060px 时「文件」列仍分到约 487px。 -->
+                                                <ComboBox.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <StackPanel>
+                                                            <TextBlock Text="{Binding Display}" />
+                                                            <!-- 第二行只在不受支持时出现（换过着色器的老归类）。
+                                                                 行高 56px 摆得下两行，下拉列表里也只有这一项会长。
+                                                                 文案用 ShortWarning 而不是 Note：这一列只有 214px，
+                                                                 整句说明会被硬裁在中间，比不显示更糟，
+                                                                 完整解释留给鼠标悬停的 ToolTip。
+                                                                 整行必须靠触发器折叠——空的 TextBlock
+                                                                 仍占一行高度，会把上面的主文案顶得偏上。 -->
+                                                            <TextBlock FontSize="10" Opacity="0.65"
+                                                                       Text="{Binding ShortWarning}">
+                                                                <TextBlock.Style>
+                                                                    <Style TargetType="TextBlock">
+                                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding IsSupported}" Value="False">
+                                                                                <Setter Property="Visibility" Value="Visible" />
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </TextBlock.Style>
+                                                            </TextBlock>
+                                                        </StackPanel>
+                                                    </DataTemplate>
+                                                </ComboBox.ItemTemplate>
+                                            </ComboBox>
+                                            <TextBlock Text="（未命中）" FontSize="12" Opacity="0.5"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                       IsHitTestVisible="False">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsMatched}" Value="False">
+                                                                <Setter Property="Visibility" Value="Visible" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </Grid>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTextColumn Header="命中后缀" Width="88" IsReadOnly="True"
+                                                Binding="{Binding MatchedSuffix}">
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="HorizontalAlignment" Value="Center" />
+                                        <Setter Property="VerticalAlignment" Value="Center" />
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+                            <!-- 归属可改：同一张贴图被两个材质共用时，不必去动后缀规则 -->
+                            <DataGridTemplateColumn Header="归属的 .vmat" Width="132">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBox Margin="2" BorderThickness="0"
+                                                 HorizontalAlignment="Stretch"
+                                                 VerticalAlignment="Center"
+                                                 TextAlignment="Center"
+                                                 Text="{Binding GroupNameOverride, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                 ToolTip="留空表示使用自动归类的基名" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                    <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Center"
+                                  VerticalAlignment="Stretch"
+                                  ResizeDirection="Columns"
+                                  Background="{DynamicResource DividerStrokeColorDefaultBrush}"
+                                  Cursor="SizeWE"
+                                  ToolTip="拖动调整列表与预览的宽度" />
+                    <Border Grid.Column="2" Margin="6,0,0,0" Padding="12" CornerRadius="6"
+                            Background="{DynamicResource LayerFillColorAltBrush}">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold"
+                                       Text="{Binding SelectedRow.GroupName, StringFormat=选中材质：{0}.vmat}" />
+                            <TextBlock DockPanel.Dock="Top" Margin="0,4,0,8" FontSize="11" Opacity="0.7"
+                                       TextWrapping="Wrap"
+                                       Text="这就是第三步将写出的完整内容。走的是同一条生成路径，因此预览与实际结果一致。" />
+                            <TextBox IsReadOnly="True"
+                                     FontFamily="Cascadia Mono, Consolas, 微软雅黑"
+                                     FontSize="11"
+                                     AcceptsReturn="True"
+                                     TextWrapping="NoWrap"
+                                     VerticalScrollBarVisibility="Auto"
+                                     HorizontalScrollBarVisibility="Auto"
+                                     Text="{Binding SelectedPreview, Mode=OneWay}" />
+                        </DockPanel>
                     </Border>
-
-                    <ScrollViewer VerticalScrollBarVisibility="Auto">
-                        <ItemsControl ItemsSource="{Binding Editor.ParameterRows}">
-                            <ItemsControl.ItemTemplateSelector>
-                                <local:ParameterRowTemplateSelector />
-                            </ItemsControl.ItemTemplateSelector>
-                        </ItemsControl>
-                    </ScrollViewer>
-                </DockPanel>
+                </Grid>
+            </Grid>
+        </Border>
+        <!-- ─── 第三步：生成进度 ─────────────────────────────────────────── -->
+        <Border Grid.Row="1">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding StepIndex}" Value="3">
+                            <Setter Property="Visibility" Value="Visible" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+            <Border Padding="20" CornerRadius="6" Background="{DynamicResource LayerFillColorAltBrush}">
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock FontWeight="SemiBold" FontSize="14" Text="第三步 · 生成" />
+                    <TextBlock Margin="0,4,0,18" FontSize="11" Opacity="0.7" TextWrapping="Wrap"
+                               Text="按第二步确认的归属写出 .vmat。同名文件已存在时会跳过并列出，不会覆盖。生成期间界面不会卡死，可随时取消。" />
+                    <ProgressBar Height="10" Minimum="0" Maximum="100"
+                                 Value="{Binding ProgressPercent, Mode=OneWay}" />
+                    <TextBlock Margin="0,8,0,0" FontSize="12" Text="{Binding ProgressMessage}" />
+                    <TextBlock Margin="0,14,0,0" FontSize="11" Opacity="0.75"
+                               TextWrapping="Wrap" Text="{Binding BuildSummary}" />
+                </StackPanel>
             </Border>
-
-            <GridSplitter Grid.Column="3" Width="4" HorizontalAlignment="Stretch"
-                          Background="{DynamicResource DividerStrokeColorDefaultBrush}" />
-
-            <!-- 右：KV 预览 -->
-            <Border Grid.Column="4" Background="{DynamicResource LayerFillColorAltBrush}">
-                <DockPanel>
-                    <Grid DockPanel.Dock="Top" Margin="12,8">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Text="KeyValues 预览" FontWeight="SemiBold" FontSize="14"
-                                   VerticalAlignment="Center" />
-                        <Button Grid.Column="1"
-                                Content="复制"
-                                Command="{Binding Editor.CopyKvCommand}"
-                                ToolTip="复制 KV 文本到剪贴板" />
-                    </Grid>
-                    <TextBox Text="{Binding Editor.GeneratedText, Mode=OneWay}"
-                             IsReadOnly="True"
-                             FontFamily="Cascadia Mono, Consolas, 微软雅黑"
-                             FontSize="12"
-                             AcceptsReturn="True"
-                             AcceptsTab="True"
-                             TextWrapping="NoWrap"
-                             VerticalScrollBarVisibility="Auto"
-                             HorizontalScrollBarVisibility="Auto"
-                             Margin="6,0,6,6" />
-                </DockPanel>
-            </Border>
-        </Grid>
-
-        <!-- ─── 状态栏 ──────────────────────────────────────────────────── -->
-        <Border Grid.Row="3" Padding="12,4"
-                Background="{DynamicResource LayerFillColorDefaultBrush}"
-                BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}"
-                BorderThickness="0,1,0,0">
-            <DockPanel>
-                <TextBlock DockPanel.Dock="Right" Text="Fluent UI / .NET 10 WPF"
-                           Opacity="0.5" FontSize="11" VerticalAlignment="Center" />
-                <Button DockPanel.Dock="Right" Margin="0,0,12,0" Padding="8,2"
-                        FontSize="11" Content="错误日志"
-                        Click="OnShowErrorLogClicked"
-                        ToolTip="查看控件错误记录" />
-                <!-- 非阻塞错误角标：出错时出现，点击可打开错误日志 -->
-                <Button x:Name="ErrorBanner" DockPanel.Dock="Right" Margin="0,0,12,0"
-                        Padding="8,2" FontSize="11" Visibility="Collapsed"
-                        Content="⚠ 0" Click="OnShowErrorLogClicked"
-                        ToolTip="点击查看错误日志">
+        </Border>
+        <!-- ─── 底部导航 ──────────────────────────────────────────────────── -->
+        <DockPanel Grid.Row="2" Margin="0,12,0,0">
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                <!-- 保存设置放在常驻底栏：三步都要用到（着色器与目录在第一步改，
+                     后缀规则在第一步之外的界面里也能动），原先只挂在第一步面板里，
+                     后两步根本够不着。 -->
+                <Button Margin="0,0,16,0" Padding="16,5" FontWeight="SemiBold"
+                        Content="保存设置"
+                        Command="{Binding SaveSettingsCommand}"
+                        ToolTip="保存着色器、资产/项目文件夹与后缀规则" />
+                <Button Margin="8,0,0,0" Padding="16,5" Content="取消生成"
+                        Command="{Binding CancelGenerationCommand}">
+                    <!-- 生成中才显示；用 DataTrigger 而不是 BooleanToVisibility 资源，
+                         免得在 Window.Resources 里为一个布尔值再占一个键。 -->
                     <Button.Style>
-                        <!-- 同样需要 BasedOn，否则会顶掉 Fluent 的按钮隐式样式 -->
                         <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-                            <Setter Property="Foreground" Value="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsGenerating}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
                         </Style>
                     </Button.Style>
                 </Button>
-                <TextBlock Text="{Binding StatusText}" VerticalAlignment="Center" />
-            </DockPanel>
-        </Border>
-
-        <!--
-            ─── 拖拽悬停反馈 ────────────────────────────────────────────────
-            覆盖整窗；由 code-behind 的 OnWindowDragOver / OnWindowDragLeave 切换。
-            IsHitTestVisible=False 保证它不会挡住拖放落点本身。
-        -->
-        <Border x:Name="DropOverlay" Grid.Row="0" Grid.RowSpan="4"
-                Visibility="Collapsed"
-                IsHitTestVisible="False"
-                Background="#4D000000"
-                BorderBrush="{DynamicResource AccentTextFillColorPrimaryBrush}"
-                BorderThickness="2">
-            <Border HorizontalAlignment="Center" VerticalAlignment="Center"
-                    Padding="28,20" CornerRadius="8"
-                    Background="{DynamicResource SolidBackgroundFillColorBaseBrush}"
-                    BorderBrush="{DynamicResource AccentTextFillColorPrimaryBrush}"
-                    BorderThickness="1">
+                <Button Margin="8,0,0,0" Padding="16,5" Content="上一步"
+                        Command="{Binding GoToPreviousStepCommand}">
+                    <!-- 同样只在第一步时隐藏；CanExecute 再兜一层，生成中一律禁掉。 -->
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                            <Setter Property="Visibility" Value="Visible" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding StepIndex}" Value="1">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
+                <Button Margin="8,0,0,0" Padding="16,5" Content="下一步"
+                        Command="{Binding GoToNextStepCommand}">
+                    <!-- 第三步没有「下一步」可走，位置让给「开始生成」。 -->
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                            <Setter Property="Visibility" Value="Visible" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding StepIndex}" Value="3">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
+                <Button Margin="8,0,0,0" Padding="16,5" FontWeight="SemiBold" Content="开始生成"
+                        IsEnabled="{Binding CanStartGenerate}"
+                        Command="{Binding GenerateCommand}"
+                        ToolTip="按当前分组与规则表生成 .vmat；已存在的文件一律跳过不覆盖">
+                    <!-- 只在第三步出现。生成是个不可轻率的写盘动作，
+                         放在第一步、第二步就意味着用户还没看扫描结果就能直接落盘；
+                         而「下一步」正是第三步的出口，两者互斥，所以这里和它用同一个条件。 -->
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding StepIndex}" Value="3">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
+            </StackPanel>
+            <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
                 <StackPanel>
-                    <TextBlock Text="&#xE8B7;" FontSize="32" HorizontalAlignment="Center"
-                               FontFamily="{StaticResource IconFont}"
-                               Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" />
-                    <TextBlock Margin="0,8,0,0" FontSize="16" FontWeight="SemiBold"
-                               HorizontalAlignment="Center"
-                               Text="松开鼠标即可导入" />
-                    <TextBlock Margin="0,6,0,0" FontSize="12" HorizontalAlignment="Center"
-                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                               Text="支持 .vmat 材质、材质文件夹、贴图文件与贴图文件夹" />
-                    <TextBlock Margin="0,4,0,0" FontSize="12" HorizontalAlignment="Center"
-                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                               Text="贴图会按文件名后缀自动写入当前着色器对应的参数" />
+                    <TextBlock FontSize="11" Opacity="0.7"
+                               Text="{Binding StepIndex, StringFormat=当前步骤 {0}/3}" />
+                    <!-- 状态行放在底栏而非第一步：保存设置现在三步都能点，反馈也必须三步都看得见。 -->
+                    <TextBlock Margin="0,3,16,0" MaxWidth="620" FontSize="11" Opacity="0.8"
+                               TextWrapping="Wrap" Text="{Binding StatusMessage}" />
                 </StackPanel>
-            </Border>
-        </Border>
+                <!-- 非阻塞错误角标：控件出错只在这里提示，不弹模态框（详见 App 的 Dispatcher 拦截）。 -->
+                <Button x:Name="ErrorBanner" VerticalAlignment="Bottom" Margin="0,0,12,0"
+                        Padding="8,2" FontSize="11" Foreground="#FFC42B1C"
+                        Visibility="Collapsed" Click="OnShowErrorLogClicked"
+                        Content="⚠ 0 个错误" ToolTip="点击查看错误日志" />
+            </StackPanel>
+        </DockPanel>
     </Grid>
+    </DockPanel>
 </Window>

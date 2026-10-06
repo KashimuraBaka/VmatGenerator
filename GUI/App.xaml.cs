@@ -3,17 +3,14 @@ using System.Text;
 using System.Windows;
 using System.Windows.Threading;
 using GUI.Diagnostics;
-using Lib;
 
 namespace GUI;
 
 /// <summary>
 /// Application entry point. The .NET 10 built-in Fluent theme is switched on by
 /// the <c>ThemeMode="System"</c> attribute in <see cref="App.xaml"/>; here we
-/// bootstrap the default scan folder, expose a single shared
-/// <see cref="MaterialScanner"/> + <see cref="Lib.VmatGenerator"/>
-/// instance for the main window to reuse, and — critically — install the global
-/// exception handlers that stop a failing control from killing the application.
+/// expose the shared picker fallback directory and — critically — install the
+/// global exception handlers that stop a failing control from killing the application.
 ///
 /// 防闪退策略（对应 issues「点击控件报错直接闪退」）：
 /// <list type="bullet">
@@ -29,7 +26,7 @@ public partial class App : Application
 {
     /// <summary>
     /// Fallback starting directory for file/folder pickers when the user has not
-    /// chosen a materials folder yet.
+    /// chosen a folder yet.
     /// <para>
     /// This is deliberately <b>not</b> a materials directory. The application no
     /// longer auto-opens any folder on startup, and baking a developer's absolute
@@ -39,11 +36,8 @@ public partial class App : Application
     public static string PickerFallbackDirectory =>
         Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
 
-    /// <summary>Shared scanner instance (single-thread, lives for the application lifetime).</summary>
-    public static MaterialScanner Scanner { get; } = new();
-
-    /// <summary>Shared VMAT generator used by the parameter editor.</summary>
-    public static Lib.VmatGenerator Generator { get; } = new();
+    // 旧的共享 MaterialScanner / VmatGenerator 字段已随参数编辑器一起删除：
+    // 向导走的是 VmatBuildService 这条独立生成路径，不需要这两个共享实例。
 
     protected override void OnStartup(StartupEventArgs e)
     {

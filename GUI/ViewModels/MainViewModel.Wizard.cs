@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
 using System.Text;
@@ -26,7 +26,7 @@ namespace GUI.ViewModels;
 /// <para>单独成文件，与「规则表编辑」那份主体分开：本文件讲的是一次生成作业的
 /// 生命周期（配置 → 分组 → 写盘），主体讲的是后缀规则本身怎么维护。</para>
 /// </summary>
-public sealed partial class QuickNavViewModel
+public sealed partial class MainViewModel
 {
     /// <summary>向导步骤数（1/2/3）。</summary>
     public const int StepCount = 3;
@@ -287,10 +287,14 @@ public sealed partial class QuickNavViewModel
             return;
         }
 
+        foreach (var row in ScanRows)
+        {
+            row.GroupChanged -= OnRowGroupChanged;
+            row.RoleChanged -= OnRowGroupChanged;
+        }
+
         var rules = BuildEffectiveRules();
         var matcher = new TextureSuffixMatcher(rules);
-
-        foreach (var row in ScanRows) row.GroupChanged -= OnRowGroupChanged;
 
         // 重扫意味着文件可能已经增删改，旧缩略图一律作废，否则缓存会一直占着预算。
         ThumbnailCache.Shared.Clear();
@@ -299,9 +303,12 @@ public sealed partial class QuickNavViewModel
         var option = RecurseTextureFolders ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
         var files = Directory.EnumerateFiles(AssetsRoot, "*", option)
             .Where(TexturePathRules.IsTextureFile)
-            .OrderBy(f => f, StringComparer.OrdinalIgnoreCase);
+            .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
+        // 第一遍：只做后缀匹配，不定归属。
         var matched = 0;
+        var parsed = new List<(string File, string Suffix, TextureRole Role, string BaseName, string RelativeDir)>();
         foreach (var file in files)
         {
             var match = matcher.Match(file);
@@ -309,16 +316,34 @@ public sealed partial class QuickNavViewModel
             if (role != TextureRole.Unknown) matched++;
 
             var relativeDir = Path.GetRelativePath(AssetsRoot, Path.GetDirectoryName(file) ?? AssetsRoot);
-            var baseName = StripSuffix(
-                Path.GetFileNameWithoutExtension(file),
-                match?.MatchedSuffix ?? string.Empty);
+            if (relativeDir == ".") relativeDir = string.Empty;
 
-            var row = new ScanRowViewModel(file, match?.MatchedSuffix ?? string.Empty, role, baseName)
+            var suffix = match?.MatchedSuffix ?? string.Empty;
+            parsed.Add((file, suffix, role, StripSuffix(Path.GetFileNameWithoutExtension(file), suffix), relativeDir));
+        }
+
+        // 每个目录里，TextureColor 贴图的基名就是该目录的材质名。
+        var owners = parsed.Where(p => p.Role == TextureRole.Color)
+            .GroupBy(p => p.RelativeDir, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<string>)g.Select(p => p.BaseName).ToArray(), StringComparer.OrdinalIgnoreCase);
+
+        // 第二遍：定归属。只有没命中的贴图才回退到 TextureColor 材质名——
+        // 命中的贴图基名本身就是对的（wall.png 与 wall_normal.png 归到 wall）。
+        var supported = GetSupportedRoles();
+        foreach (var p in parsed)
+        {
+            var baseName = p.Role == TextureRole.Unknown && owners.TryGetValue(p.RelativeDir, out var names)
+                ? PickOwner(names, p.BaseName) ?? p.BaseName
+                : p.BaseName;
+
+            var row = new ScanRowViewModel(p.File, p.Suffix, p.Role, baseName)
             {
-                RelativeDirectory = relativeDir == "." ? string.Empty : relativeDir,
-                Include = role != TextureRole.Unknown,
+                RelativeDirectory = p.RelativeDir,
+                Include = p.Role != TextureRole.Unknown,
             };
+            row.UpdateRoleOptions(supported);
             row.GroupChanged += OnRowGroupChanged;
+            row.RoleChanged += OnRowGroupChanged;   // 槽位决定写哪个参数键，预览必须跟着变
             ScanRows.Add(row);
         }
 
@@ -332,6 +357,40 @@ public sealed partial class QuickNavViewModel
             : $"共 {ScanRows.Count} 个图像，命中 {matched} 个，归为 {CountGroups()} 个材质。";
     }
 
+    /// <summary>
+    /// 在同一目录的若干 TextureColor 材质名里，为一张没命中后缀的贴图挑一个归属。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>先找前缀吻合的。</b><c>wall_extra.png</c> 该跟 <c>wall</c>，
+    /// 而不是目录里恰好排在最前面的那个材质。多个候选时取最长的那个
+    /// （<c>wall</c> 与 <c>wall_dark</c> 同时存在时，<c>wall_dark_extra.png</c> 归后者）。</para>
+    ///
+    /// <para><b>词边界是必须的。</b><c>wallpaper.png</c> 不该被 <c>wall</c> 领走——
+    /// 否则仅凭名字碰巧以 wall 开头，就会被并进不相干的材质。</para>
+    ///
+    /// <para><b>前缀不吻合就返回 null，不做兜底。</b>曾经退到「目录里第一个材质名」，
+    /// 结果 <c>wallpaper.png</c> 被塞进了 <c>crate</c>（按路径序 crate 排在 wall 前面）。
+    /// 一张明显不属于任何材质的贴图，硬塞进某个材质比单独立一个更糟：
+    /// 它会以错误的身份混进材质预览，用户很难看出是归名规则干的。
+    /// 留在自己的名下，用户一眼就知道「这张我还没归类」。</para>
+    /// </remarks>
+    /// <param name="names">该目录下 TextureColor 贴图的基名列表。</param>
+    /// <param name="baseName">待归类贴图去掉后缀后的基名。</param>
+    /// <returns>归属的材质名；无吻合候选时返回 <c>null</c>。</returns>
+    private static string? PickOwner(IReadOnlyList<string> names, string baseName)
+    {
+        string? best = null;
+
+        foreach (var name in names)
+        {
+            if (baseName.Length <= name.Length) continue;
+            if (!baseName.StartsWith(name, StringComparison.OrdinalIgnoreCase)) continue;
+            if (baseName[name.Length] is not ('_' or '-' or '.')) continue;
+            if (best is null || name.Length > best.Length) best = name;
+        }
+
+        return best;
+    }
     private void OnRowGroupChanged() => RefreshMaterialPreview();
 
 /// <summary>拼出本次扫描实际使用的规则表 = 规则表 + 推断出且勾选的新增后缀。</summary>
