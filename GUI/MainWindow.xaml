@@ -11,7 +11,12 @@
         Height="780" Width="1280"
         MinHeight="520" MinWidth="900"
         Background="{DynamicResource ApplicationBackgroundBrush}"
-        WindowStartupLocation="CenterScreen">
+        WindowStartupLocation="CenterScreen"
+        AllowDrop="True"
+        DragEnter="OnWindowDragEnter"
+        DragOver="OnWindowDragOver"
+        DragLeave="OnWindowDragLeave"
+        Drop="OnWindowDrop">
 
     <Window.DataContext>
         <vm:MainViewModel x:Name="RootVm" />
@@ -58,7 +63,15 @@
                 <MenuItem Header="按着色器过滤(_S)…" x:Name="FilterMenuItem" Click="OnFilterMenuClicked" />
                 <MenuItem Header="清除过滤(_C)"      Command="{Binding ClearFilterCommand}" />
             </MenuItem>
+            <MenuItem Header="工具(_T)">
+                <MenuItem Header="贴图后缀快速导航(_Q)" Click="OnOpenQuickNavClicked"
+                          InputGestureText="Ctrl+Q"
+                          ToolTip="配置生成着色器类型、贴图根目录与贴图后缀规则" />
+            </MenuItem>
             <MenuItem Header="帮助(_H)">
+                <MenuItem Header="贴图后缀自检(_S)…" Click="OnRunTextureSuffixSelfTest"
+                          ToolTip="重跑「后缀 → 语义槽位 → 着色器参数键」整条链路的可执行自检用例（不触碰本机 settings.json）" />
+                <Separator />
                 <MenuItem Header="错误日志(_L)…" Click="OnShowErrorLogClicked" />
                 <MenuItem Header="打开日志目录(_F)…" Click="OnOpenLogFolderClicked" />
                 <Separator />
@@ -119,6 +132,18 @@
                     <TextBlock Text="清除" Margin="6,0,0,0" VerticalAlignment="Center" />
                 </StackPanel>
             </Button>
+            <Separator />
+            <!--
+                工具栏入口：绑定命令（与菜单项的 Click 只挂其一，避免 WPF 同时执行
+                Command 与 Click 而把对话框打开两次）。
+            -->
+            <Button Command="{Binding OpenQuickNavCommand}"
+                    ToolTip="贴图后缀快速导航：配置生成着色器类型与贴图后缀规则">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="&#xE713;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" />
+                    <TextBlock Text="快速导航" Margin="6,0,0,0" VerticalAlignment="Center" />
+                </StackPanel>
+            </Button>
         </ToolBar>
 
         <!-- ─── 三栏主体 ────────────────────────────────────────────────── -->
@@ -128,7 +153,9 @@
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" MinWidth="360" />
                 <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="360" MinWidth="280" />
+                <!-- KV 预览与编辑器同为 *：两者平分导航栏之外的宽度，预览因此占约半窗。
+                     MinWidth 保证窗口收窄到最小时等宽字体仍有可读宽度。 -->
+                <ColumnDefinition Width="*" MinWidth="280" />
             </Grid.ColumnDefinitions>
 
             <!-- 左：TreeView 风格的着色器分组 -->
@@ -312,6 +339,39 @@
                 </Button>
                 <TextBlock Text="{Binding StatusText}" VerticalAlignment="Center" />
             </DockPanel>
+        </Border>
+
+        <!--
+            ─── 拖拽悬停反馈 ────────────────────────────────────────────────
+            覆盖整窗；由 code-behind 的 OnWindowDragOver / OnWindowDragLeave 切换。
+            IsHitTestVisible=False 保证它不会挡住拖放落点本身。
+        -->
+        <Border x:Name="DropOverlay" Grid.Row="0" Grid.RowSpan="4"
+                Visibility="Collapsed"
+                IsHitTestVisible="False"
+                Background="#4D000000"
+                BorderBrush="{DynamicResource AccentTextFillColorPrimaryBrush}"
+                BorderThickness="2">
+            <Border HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Padding="28,20" CornerRadius="8"
+                    Background="{DynamicResource SolidBackgroundFillColorBaseBrush}"
+                    BorderBrush="{DynamicResource AccentTextFillColorPrimaryBrush}"
+                    BorderThickness="1">
+                <StackPanel>
+                    <TextBlock Text="&#xE8B7;" FontSize="32" HorizontalAlignment="Center"
+                               FontFamily="{StaticResource IconFont}"
+                               Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+                    <TextBlock Margin="0,8,0,0" FontSize="16" FontWeight="SemiBold"
+                               HorizontalAlignment="Center"
+                               Text="松开鼠标即可导入" />
+                    <TextBlock Margin="0,6,0,0" FontSize="12" HorizontalAlignment="Center"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                               Text="支持 .vmat 材质、材质文件夹、贴图文件与贴图文件夹" />
+                    <TextBlock Margin="0,4,0,0" FontSize="12" HorizontalAlignment="Center"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                               Text="贴图会按文件名后缀自动写入当前着色器对应的参数" />
+                </StackPanel>
+            </Border>
         </Border>
     </Grid>
 </Window>

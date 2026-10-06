@@ -36,6 +36,13 @@ public sealed partial class ShaderEditorViewModel : ObservableObject
 
     public ObservableCollection<ParameterRowViewModel> ParameterRows { get; } = new();
 
+    /// <summary>
+    /// 当前载入的着色器模板；未载入时为 null。
+    /// 拖拽导入流程用它判断「是否已经载入材质」，以及是否需要按
+    /// <c>Settings.DefaultShaderName</c> 新建一个模板。
+    /// </summary>
+    public ShaderTemplate? CurrentShader => _shader;
+
     [ObservableProperty]
     private string _generatedText = string.Empty;
 
@@ -161,7 +168,14 @@ public sealed partial class ShaderEditorViewModel : ObservableObject
             case ShaderParamKind.Float:
                 return new ScalarParameter(p, ParseDouble(raw));
             case ShaderParamKind.Vector:
-                return new VectorParameter(p, ParseVector(raw));
+                // 「贴图 ↔ 常量 vec4」键（TextureOrVector）里可能存着贴图路径 ——
+                // 例如拖拽导入写进 TextureRoughness1 的值。Vector4.TryParse 解析不了，
+                // 因此用 VectorParameter.RawText 原样保留，重新打开材质时不会丢。
+                return raw is { Length: > 0 }
+                       && p.Shape == ShaderValueShape.TextureOrVector
+                       && !Vector4.TryParse(raw, out _)
+                    ? new VectorParameter(p, default, raw)
+                    : new VectorParameter(p, ParseVector(raw));
             case ShaderParamKind.Texture:
                 return new TextureParameter(p, raw ?? string.Empty);
             case ShaderParamKind.String:
@@ -215,6 +229,41 @@ public sealed partial class ShaderEditorViewModel : ObservableObject
             ErrorLog.Error("渲染 KV 预览", DescribeRowsNeedingContext(), ex);
             GeneratedText = $"// 渲染失败：{ex.Message}\n// 详细堆栈见错误日志：{ErrorLog.LogFilePath}";
             StatusText = "渲染失败，已记录到错误日志。";
+        }
+    }
+
+    /// <summary>
+    /// 在 <see cref="ParameterRows"/> 中查找 <paramref name="parameterKey"/> 对应行并写入
+    /// <paramref name="vmatPath"/>。仅当该行存在、键名匹配，且行类型为
+    /// <see cref="TextureParameter"/>（贴图）或 <see cref="VectorParameter"/>
+    /// （「贴图 ↔ 常量 vec4」双形态键）时写入。
+    /// <para>
+    /// 写入成功返回 <c>true</c>；键不存在 / 类型不匹配 / 值为空返回 <c>false</c>（不抛异常）。
+    /// 赋值本身就会触发既有 <see cref="ParameterRowViewModel.PropertyChanged"/> →
+    /// <see cref="RebuildText"/>，因此 KV 预览自动刷新，<b>无需</b>新增任何刷新代码。
+    /// </para>
+    /// </summary>
+    public bool TrySetTextureValue(string parameterKey, string vmatPath)
+    {
+        if (string.IsNullOrEmpty(parameterKey) || string.IsNullOrEmpty(vmatPath)) return false;
+
+        var row = ParameterRows.FirstOrDefault(r =>
+            string.Equals(r.Key, parameterKey, StringComparison.Ordinal));
+
+        switch (row)
+        {
+            case TextureParameter texture:
+                texture.Value = vmatPath;
+                return true;
+
+            // VectorParameter 在界面上是四个数字框，承载不了路径字符串；
+            // 「贴图 ↔ 常量 vec4」键写贴图时改走 RawText，由 WriteValue 原样输出
+            // （Lib 侧 Vector4.TryParse 失败会保留字符串，路径不失真）。
+            case VectorParameter vector:
+                return vector.TrySetRawText(vmatPath);
+
+            default:
+                return false;
         }
     }
 

@@ -26,6 +26,11 @@ namespace Lib;
 /// ValveKeyValue — the canonical Source 2 KeyValues library — and writes with the
 /// same library's serializer, so formatting can never change the document's meaning.
 ///
+/// <para><b>写出走 KV3，读取 KV1 / KV3 都接受。</b>
+/// Source 2 的 .vmat 是 KeyValues3。KV3 文本必须带
+/// <c>&lt;!-- kv3 encoding:text:version{…} --&gt;</c> 头，缺头库会直接抛异常；
+/// 而本工具历史上写出的 KV1 文件没有这个头，所以解析必须按内容先判定格式。</para>
+///
 /// <para><b>Known limitations</b> (inherited from ValveKeyValue 0.71):</para>
 /// <list type="bullet">
 /// <item>Comments are dropped — <c>KVDocument</c> exposes no comment collection and
@@ -39,17 +44,36 @@ public static class VmatFormatter
     /// <summary>Tab indent per nesting level, matching Valve's own material files.</summary>
     public const string Indent = "\t";
 
-    private static readonly KVSerializer Serializer = KVSerializer.Create(KVSerializationFormat.KeyValues1Text);
+    private static readonly KVSerializer Kv3Serializer =
+        KVSerializer.Create(KVSerializationFormat.KeyValues3Text);
+
+    private static readonly KVSerializer Kv1Serializer =
+        KVSerializer.Create(KVSerializationFormat.KeyValues1Text);
+
+    /// <summary>按内容判定格式并解析：带 KV3 头的按 KV3 读，否则按 KV1 读。</summary>
+    private static KVDocument ParseDocument(string source) =>
+        source.TrimStart().StartsWith("<!--", StringComparison.Ordinal)
+            ? TryKv3(source) ?? Kv1Serializer.DeserializeWithSourceMap(source).Document
+            : Kv1Serializer.DeserializeWithSourceMap(source).Document;
+
+    /// <summary>按 KV3 解析；失败返回 <c>null</c>，由调用方回落到 KV1。</summary>
+    private static KVDocument? TryKv3(string source)
+    {
+        try
+        {
+            return Kv3Serializer.DeserializeWithSourceMap(source).Document;
+        }
+        catch (KeyValueException)
+        {
+            return null;
+        }
+    }
 
     /// <summary>
     /// Parse <paramref name="source"/> and re-emit it in Valve's canonical layout.
-    /// Throws <see cref="System.ArgumentException"/> when the input is not valid KeyValues1.
+    /// Throws <see cref="System.ArgumentException"/> when the input is not valid KeyValues.
     /// </summary>
-    public static string Format(string source)
-    {
-        var (document, _) = Serializer.DeserializeWithSourceMap(source);
-        return Write(document);
-    }
+    public static string Format(string source) => Write(ParseDocument(source));
 
     /// <summary>Format a file in place, writing UTF-8 without a BOM and with LF line endings.</summary>
     /// <returns><c>true</c> when the file's bytes actually changed.</returns>
@@ -78,7 +102,7 @@ public static class VmatFormatter
             collection.Add(entry.Key ?? string.Empty, entry.Value);
 
         using var ms = new MemoryStream();
-        Serializer.Serialize(ms, collection, document.Name ?? string.Empty);
+        Kv3Serializer.Serialize(ms, collection, document.Name ?? string.Empty);
         return Encoding.UTF8.GetString(ms.ToArray());
     }
 
@@ -96,8 +120,8 @@ public static class VmatFormatter
     /// </summary>
     public static bool Equivalent(string a, string b)
     {
-        var (docA, _) = Serializer.DeserializeWithSourceMap(a);
-        var (docB, _) = Serializer.DeserializeWithSourceMap(b);
+        var docA = ParseDocument(a);
+        var docB = ParseDocument(b);
         return Same(docA, docB);
     }
 

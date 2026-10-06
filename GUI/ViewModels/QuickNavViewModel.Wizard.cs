@@ -1,0 +1,623 @@
+using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.IO;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using GUI.Diagnostics;
+using GUI.Imaging;
+using Lib;
+using Microsoft.Win32;
+
+namespace GUI.ViewModels;
+
+/// <summary>
+/// 「贴图快速导航」三步向导：
+/// <list type="number">
+/// <item>选择<b>目标着色器</b>、<b>资产文件夹</b>（扫描贴图的来源）与<b>项目文件夹</b>（.vmat 输出目录）；</item>
+/// <item>列出扫描到的全部图像，按「去掉后缀后的基名」自动归类到各个 .vmat，
+/// 允许逐行改后缀后重新扫描、也允许手动指定某张贴图属于哪个 .vmat；
+/// 右侧实时显示选中那份 .vmat 生成后的 KeyValues3 文本；</item>
+/// <item>开始生成，显示进度条与当前正在处理的内容。</item>
+/// </list>
+///
+/// <para>单独成文件，与「规则表编辑」那份主体分开：本文件讲的是一次生成作业的
+/// 生命周期（配置 → 分组 → 写盘），主体讲的是后缀规则本身怎么维护。</para>
+/// </summary>
+public sealed partial class QuickNavViewModel
+{
+    /// <summary>向导步骤数（1/2/3）。</summary>
+    public const int StepCount = 3;
+
+    private CancellationTokenSource? _buildCts;
+
+    // ─── 第一步：目标与目录 ───────────────────────────────────────────────
+
+    /// <summary>
+    /// 资产文件夹：扫描贴图的来源目录。
+    /// </summary>
+    /// <remarks>递归与否由已有的 <see cref="RecurseTextureFolders"/> 开关控制。</remarks>
+    [ObservableProperty]
+    private string _assetsRoot = string.Empty;
+
+    /// <summary>
+    /// 项目文件夹：生成的 <c>.vmat</c> 输出目录，与贴图所在位置无关。
+    /// </summary>
+    /// <remarks>
+    /// 与资产文件夹分开，是为了让「贴图在引擎目录、材质在工程目录」这类布局可用；
+    /// <c>.vmat</c> 里写的贴图路径仍然相对<b>资产</b>根。
+    /// </remarks>
+    [ObservableProperty]
+    private string _projectRoot = string.Empty;
+
+    // ─── 第二步：扫描与分组 ───────────────────────────────────────────────
+
+    /// <summary>扫描到的全部图像，一行一个。</summary>
+    public ObservableCollection<ScanRowViewModel> ScanRows { get; } = new();
+
+    /// <summary>当前选中的行；其所属 .vmat 的生成结果实时显示在右侧预览。</summary>
+    [ObservableProperty]
+    private ScanRowViewModel? _selectedRow;
+
+    /// <summary>选中行所属 <c>.vmat</c> 生成后的 KeyValues3 文本预览。</summary>
+    [ObservableProperty]
+    private string _selectedPreview = "（尚未扫描）";
+
+    /// <summary>扫描结果的一句话摘要。</summary>
+    [ObservableProperty]
+    private string _scanSummary = "尚未扫描。";
+
+
+    // ─── 第三步：生成进度 ─────────────────────────────────────────────────
+
+    /// <summary>进度百分比 0–100。</summary>
+    [ObservableProperty]
+    private double _progressPercent;
+
+    /// <summary>当前正在处理的内容（生成时会持续变化）。</summary>
+    [ObservableProperty]
+    private string _progressMessage = "尚未生成。";
+
+    /// <summary>生成中。为 <c>true</c> 时出现取消按钮。</summary>
+    [ObservableProperty]
+    private bool _isGenerating;
+
+    /// <summary>上一次生成的完整结果说明。</summary>
+    [ObservableProperty]
+    private string _buildSummary = string.Empty;
+
+    // ─── 步骤导航 ─────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// 当前步骤，1–3。步骤条与内容区都由它驱动。
+    /// </summary>
+    [ObservableProperty]
+    private int _stepIndex = 1;
+
+    /// <summary>第一步是否填齐（着色器 + 两个目录都存在）。</summary>
+    public bool IsStep1Ready =>
+        SelectedShader is not null
+        && Directory.Exists(AssetsRoot)
+        && Directory.Exists(ProjectRoot);
+
+    /// <summary>第二步是否可进入（至少扫到一张命中的贴图）。</summary>
+    public bool IsStep2Ready => ScanRows.Any(r => r.IsMatched);
+
+    /// <summary>回到第一步。</summary>
+    [RelayCommand]
+    public void GoToStep1() { if (!IsGenerating) StepIndex = 1; }
+
+    /// <summary>进入第二步；第一步未填齐时不放行。</summary>
+    [RelayCommand]
+    public void GoToStep2()
+    {
+        if (!IsGenerating && IsStep1Ready)
+        {
+            StepIndex = 2;
+            TryAutoScan();
+        }
+    }
+
+    /// <summary>进入第三步；没有可生成的内容时不放行。</summary>
+    [RelayCommand]
+    public void GoToStep3()
+    {
+        if (!IsGenerating && IsStep1Ready && IsStep2Ready) StepIndex = 3;
+    }
+
+    /// <summary>
+    /// 底部「下一步」：按当前步骤顺推，到第三步为止。
+    /// </summary>
+    /// <remarks>
+    /// 条件不满足时静默不动，而不是弹提示：向导里「下一步」置灰已足够说明原因，
+    /// 弹窗反而打断「填错了→回去改」的连续操作。
+    /// </remarks>
+    [RelayCommand]
+    public void GoToNextStep()
+    {
+        switch (StepIndex)
+        {
+            case 1 when IsStep1Ready:
+                StepIndex = 2;
+                TryAutoScan();
+                break;
+            case 2 when IsStep2Ready: StepIndex = 3; break;
+        }
+    }
+
+    /// <summary>
+    /// 底部「上一步」：回到前一步。
+    /// </summary>
+    /// <remarks>
+    /// 刻意<b>不校验</b>各步的就绪条件——往回走是为了改前面的输入，
+    /// 拿「第二步没扫到东西」去拦住「回第一步」只会把人困在原地。
+    /// </remarks>
+    [RelayCommand(CanExecute = nameof(CanGoPreviousStep))]
+    public void GoToPreviousStep()
+    {
+        if (IsGenerating || StepIndex <= 1) return;
+        StepIndex--;
+    }
+
+    /// <summary>「上一步」是否可点：不在第一步、且没有正在生成。</summary>
+    public bool CanGoPreviousStep => StepIndex > 1 && !IsGenerating;
+
+    /// <summary>「开始生成」是否可点：停在第三步、且没有正在生成。</summary>
+    public bool CanStartGenerate => StepIndex == 3 && !IsGenerating;
+
+    /// <summary>
+    /// 广播受步骤影响的派生状态。
+    /// </summary>
+    /// <remarks>
+    /// 这些值都是几个属性的组合，CommunityToolkit 不会自动为组合值发通知，
+    /// 必须在相关属性各自变化时手工补一次，否则按钮会停留在旧状态。
+    /// </remarks>
+    public void NotifyStepStateChanged()
+    {
+        OnPropertyChanged(nameof(IsStep1Ready));
+        OnPropertyChanged(nameof(IsStep2Ready));
+        OnPropertyChanged(nameof(CanGoPreviousStep));
+        OnPropertyChanged(nameof(CanStartGenerate));
+        GoToStep1Command.NotifyCanExecuteChanged();
+        GoToStep2Command.NotifyCanExecuteChanged();
+        GoToStep3Command.NotifyCanExecuteChanged();
+        GoToNextStepCommand.NotifyCanExecuteChanged();
+        GoToPreviousStepCommand.NotifyCanExecuteChanged();
+    }
+
+    partial void OnStepIndexChanged(int value) => NotifyStepStateChanged();
+
+    partial void OnIsGeneratingChanged(bool value) => NotifyStepStateChanged();
+
+    partial void OnAssetsRootChanged(string value)
+    {
+        NotifyStepStateChanged();
+        ScanSummary = string.IsNullOrWhiteSpace(value) ? "尚未扫描。" : ScanSummary;
+        TryAutoScan();
+    }
+
+    partial void OnProjectRootChanged(string value)
+    {
+        NotifyStepStateChanged();
+        TryAutoScan();
+    }
+
+    /// <summary>第一步的目录选择：资产文件夹（扫描来源）。</summary>
+    [RelayCommand]
+    public void BrowseAssets() =>
+        ControlErrorRecorder.Guard("选择资产文件夹", this, () =>
+        {
+            var picked = FolderPicker.Pick("选择资产文件夹（贴图来源）", AssetsRoot);
+            if (picked is not null) AssetsRoot = picked;
+        });
+
+    /// <summary>第一步的目录选择：项目文件夹（.vmat 输出）。</summary>
+    [RelayCommand]
+    public void BrowseProject() =>
+        ControlErrorRecorder.Guard("选择项目文件夹", this, () =>
+        {
+            var picked = FolderPicker.Pick("选择项目文件夹（.vmat 输出位置）", ProjectRoot);
+            if (picked is not null) ProjectRoot = picked;
+        });
+
+    /// <summary>扫描资产文件夹，填充第二步列表。</summary>
+    [RelayCommand]
+    public void Scan() =>
+        ControlErrorRecorder.Guard("扫描资产文件夹", this, ScanCore);
+
+    /// <summary>
+    /// 按用户补充的后缀重新扫描。
+    /// </summary>
+    /// <remarks>
+    /// 与「扫描」是同一条路径，区别只有规则表：这里把 <see cref="ExtraSuffixes"/>
+    /// 临时追加到规则末尾，让本次扫描生效且<b>不落盘</b>。
+    /// </remarks>
+    [RelayCommand]
+    public void Rescan() =>
+        ControlErrorRecorder.Guard("按后缀重新扫描", this, ScanCore);
+
+    /// <summary>把扫描列表里 <see cref="ScanRowViewModel.GroupNameOverride"/> 的手动指定全部还原。</summary>
+    [RelayCommand]
+    public void ResetManualGroups()
+    {
+        if (IsGenerating) return;
+        foreach (var row in ScanRows)
+            row.GroupNameOverride = string.Empty;
+        RefreshMaterialPreview();
+        ScanSummary = $"已还原自动分组，共 {ScanRows.Count} 行。";
+    }
+
+    // ─── 扫描实现 ─────────────────────────────────────────────────────────
+
+    /// <summary>上一次扫描所用的资产目录；用于判断「目录真的换了」还是只是重复赋值。</summary>
+    private string _lastScannedAssetsRoot = string.Empty;
+
+    /// <summary>
+    /// 载入已保存配置期间为 true：读回配置不是用户改了路径，不该顺手扫一遍盘。
+    /// </summary>
+    private bool _suppressAutoScan;
+
+    /// <summary>
+    /// 资产目录定下来后自动扫一次，省掉「选完路径还要再点扫描」这一步。
+    /// </summary>
+    /// <remarks>
+    /// <para>只认<b>资产目录变化</b>：项目目录改一改没必要把同一批贴图重扫一遍。</para>
+    /// <para>手动「扫描」按钮原样保留——自动扫只覆盖「第一次定目录」这个时机，
+    /// 规则改了、文件增删了、想强制重来一遍，都还得靠它。</para>
+    /// </remarks>
+    private void TryAutoScan()
+    {
+        if (_suppressAutoScan || !IsStep1Ready) return;
+        if (string.Equals(_lastScannedAssetsRoot, AssetsRoot, StringComparison.OrdinalIgnoreCase)) return;
+
+        Scan();
+    }
+    private void ScanCore()
+    {
+        if (!Directory.Exists(AssetsRoot))
+        {
+            ScanSummary = $"资产文件夹不存在：{AssetsRoot}";
+            return;
+        }
+        if (SelectedShader is not { } shader)
+        {
+            ScanSummary = "请先选择目标着色器。";
+            return;
+        }
+
+        var rules = BuildEffectiveRules();
+        var matcher = new TextureSuffixMatcher(rules);
+
+        foreach (var row in ScanRows) row.GroupChanged -= OnRowGroupChanged;
+
+        // 重扫意味着文件可能已经增删改，旧缩略图一律作废，否则缓存会一直占着预算。
+        ThumbnailCache.Shared.Clear();
+
+        ScanRows.Clear();
+        var option = RecurseTextureFolders ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
+        var files = Directory.EnumerateFiles(AssetsRoot, "*", option)
+            .Where(TexturePathRules.IsTextureFile)
+            .OrderBy(f => f, StringComparer.OrdinalIgnoreCase);
+
+        var matched = 0;
+        foreach (var file in files)
+        {
+            var match = matcher.Match(file);
+            var role = match is null ? TextureRole.Unknown : match.Role;
+            if (role != TextureRole.Unknown) matched++;
+
+            var relativeDir = Path.GetRelativePath(AssetsRoot, Path.GetDirectoryName(file) ?? AssetsRoot);
+            var baseName = StripSuffix(
+                Path.GetFileNameWithoutExtension(file),
+                match?.MatchedSuffix ?? string.Empty);
+
+            var row = new ScanRowViewModel(file, match?.MatchedSuffix ?? string.Empty, role, baseName)
+            {
+                RelativeDirectory = relativeDir == "." ? string.Empty : relativeDir,
+                Include = role != TextureRole.Unknown,
+            };
+            row.GroupChanged += OnRowGroupChanged;
+            ScanRows.Add(row);
+        }
+
+        SelectedRow = ScanRows.FirstOrDefault(r => r.IsMatched);
+        RefreshMaterialPreview();
+
+        _lastScannedAssetsRoot = AssetsRoot;
+
+        ScanSummary = matched == 0
+            ? $"在 {ScanRows.Count} 个图像里没有一个命中后缀规则——可在下方补充后缀后重新扫描。"
+            : $"共 {ScanRows.Count} 个图像，命中 {matched} 个，归为 {CountGroups()} 个材质。";
+    }
+
+    private void OnRowGroupChanged() => RefreshMaterialPreview();
+
+/// <summary>拼出本次扫描实际使用的规则表 = 规则表 + 推断出且勾选的新增后缀。</summary>
+    /// <remarks>
+    /// 早先这里是「把用户手填的补充后缀一律按 <see cref="TextureRole.Color"/> 处理」——
+    /// 于是 <c>_normal</c>、<c>_tran</c> 全被当成颜色贴图。现在每个后缀都带着
+    /// <b>它自己推断出来的槽位</b>进来，猜错的可能只剩「推断本身」，不再是「一律 Color」。
+    /// </remarks>
+    private List<TextureSuffixRule> BuildEffectiveRules()
+    {
+        var rules = Rules.Select(r => r.ToRule()).ToList();
+
+        foreach (var row in InferredSuffixes)
+        {
+            foreach (var suffix in row.EffectiveSuffixes)
+            {
+                rules.Add(new TextureSuffixRule(suffix, row.Role));
+            }
+        }
+
+        return rules;
+    }
+
+// ─── 按着色器推断贴图槽位 ───────────────────────────────────────────────
+
+    /// <summary>
+    /// 当前着色器能承载的语义槽位，以及每个槽位对应的候选后缀。
+    /// </summary>
+    /// <remarks>
+    /// 着色器一换就整体重算——同一个资产目录换着色器，要的贴图完全不是一回事。
+    /// </remarks>
+    public ObservableCollection<InferredSuffixViewModel> InferredSuffixes { get; } = new();
+
+    /// <summary>推断结果的摘要文案。</summary>
+    public string InferredSummary => InferredSuffixes.Count == 0
+        ? SelectedShader is null
+            ? "尚未选择着色器。"
+            : $"{SelectedShader.DisplayName} 没有可用的贴图槽位。"
+        : $"{SelectedShader?.DisplayName} 需要 {InferredSuffixes.Count} 类贴图，"
+          + $"其中 {InferredSuffixes.Sum(r => r.FreshCount)} 个后缀规则表里还没有。";
+
+    /// <summary>
+    /// 把推断出的、规则表里还没有的后缀并入规则表。
+    /// </summary>
+    /// <remarks>
+    /// 推断默认只作用于<b>本次扫描</b>，不擅自改用户的持久配置；
+    /// 想要它长期生效，就显式点这个按钮，随后「保存设置」写进注册表。
+    /// </remarks>
+    [RelayCommand]
+    public void ApplyInferredSuffixes()
+    {
+        var added = 0;
+        foreach (var row in InferredSuffixes.Where(r => r.IsEnabled))
+        {
+            foreach (var suffix in row.Fresh)
+            {
+                Rules.Add(new TextureSuffixRuleViewModel(suffix, row.Role, true));
+                added++;
+            }
+        }
+
+        // 只刷新「哪些算新增」的判定，不整份重推断：
+        // 重推断会把用户刚敲进去的自定义后缀一并冲掉，等于白输入。
+        foreach (var row in InferredSuffixes)
+        {
+            row.UpdateExisting(CollectCanonicalSuffixes());
+        }
+
+        OnPropertyChanged(nameof(InferredSummary));
+        ScanSummary = added == 0
+            ? "推断出的后缀规则表里已经都有了，无需添加。"
+            : $"已把推断出的 {added} 个后缀加入规则表——点「保存设置」后写入注册表。";
+    }
+
+    /// <summary>
+    /// 规则表里所有后缀的归一化形态（小写、无前导下划线），用于判定哪些是新增。
+    /// </summary>
+    private IReadOnlySet<string> CollectCanonicalSuffixes()
+    {
+        var existing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var rule in Rules)
+        {
+            var key = CanonicalSuffix(rule.Suffix);
+            if (key.Length > 1) existing.Add(key);
+        }
+
+        return existing;
+    }
+
+    /// <summary>按当前着色器重新推断槽位与候选后缀，并标出哪些是规则表里没有的。</summary>
+    public void RefreshInferredSuffixes()
+    {
+        var existing = CollectCanonicalSuffixes();
+
+        InferredSuffixes.Clear();
+        foreach (var set in ShaderSuffixInference.Infer(SelectedShader))
+        {
+            InferredSuffixes.Add(new InferredSuffixViewModel(set, existing));
+        }
+
+        OnPropertyChanged(nameof(InferredSuffixes));
+        OnPropertyChanged(nameof(InferredSummary));
+    }
+
+    /// <summary>把后缀归一化成 <c>_小写</c> 形式，供「是否已存在」比较。</summary>
+    private static string CanonicalSuffix(string? suffix)
+    {
+        var normalized = TextureSuffixMatcher.NormalizeName(suffix ?? string.Empty);
+        return normalized.Length == 0 ? string.Empty : "_" + normalized;
+    }
+    private int CountGroups() =>
+        ScanRows.Where(r => r.Include).Select(r => r.GroupName).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+
+    private static string StripSuffix(string fileNameNoExt, string matchedSuffix)
+    {
+        if (matchedSuffix.Length > 0
+            && fileNameNoExt.Length >= matchedSuffix.Length
+            && fileNameNoExt.EndsWith(matchedSuffix, StringComparison.OrdinalIgnoreCase))
+        {
+            fileNameNoExt = fileNameNoExt[..^matchedSuffix.Length];
+        }
+        var name = fileNameNoExt.Trim('_', '-', ' ');
+        return name.Length == 0 ? "material" : name;
+    }
+
+    /// <summary>把拖放进来的路径设为资产文件夹；拖入文件则取其所在目录。</summary>
+    /// <remarks>
+    /// 向导以「扫一个目录」为单位工作，没有「一堆零散文件」的概念，
+    /// 因此拖入文件时自动取其父目录；用户仍可在第一步手动改。
+    /// </remarks>
+    public void AddDroppedPaths(IEnumerable<string> paths) =>
+        ControlErrorRecorder.Guard("拖入资产文件夹", this, () =>
+        {
+            foreach (var raw in paths)
+            {
+                if (string.IsNullOrWhiteSpace(raw)) continue;
+                var dir = Directory.Exists(raw) ? raw : Path.GetDirectoryName(Path.GetFullPath(raw));
+                if (!string.IsNullOrEmpty(dir) && Directory.Exists(dir)) { AssetsRoot = dir; break; }
+            }
+        });
+
+    // ─── 第二步：预览 ─────────────────────────────────────────────────────
+
+    /// <summary>选中行变化时自动刷新右侧预览。</summary>
+    partial void OnSelectedRowChanged(ScanRowViewModel? value) => RefreshMaterialPreview();
+    /// <summary>重建右侧预览：选中行所属那份 .vmat 的完整生成结果。</summary>
+    /// <remarks>
+    /// 走的是与写盘<b>完全同一条</b> <see cref="VmatBuildService"/>，因此预览里看到的就是
+    /// 第三步会写出的内容，不存在「预览和实际不一致」的问题。
+    /// </remarks>
+    public void RefreshMaterialPreview()
+    {
+        if (SelectedShader is not { } shader)
+        {
+            SelectedPreview = "（尚未选择着色器）";
+            return;
+        }
+        if (SelectedRow is null)
+        {
+            SelectedPreview = "（尚未扫描）";
+            return;
+        }
+
+        var group = SelectedRow.GroupName;
+        var files = ScanRows
+            .Where(r => r.Include && string.Equals(r.GroupName, group, StringComparison.OrdinalIgnoreCase))
+            .Select(r => r.FilePath)
+            .ToList();
+
+        if (files.Count == 0)
+        {
+            SelectedPreview = $"（{group} 下面还没有勾选的贴图）";
+            return;
+        }
+
+        SelectedPreview = ControlErrorRecorder.Guard(
+            "预览材质文本", this,
+            () => VmatBuildService.Preview(shader, files, BuildEffectiveRules(), AssetsRoot, ProjectRoot),
+            fallback: "（预览失败，详见错误日志）");
+    }
+
+    // ─── 第三步：生成 ─────────────────────────────────────────────────────
+
+    /// <summary>
+    /// 执行生成。
+    /// </summary>
+    /// <remarks>
+    /// <b>为什么放后台线程：</b><see cref="Progress{T}"/> 的回调要经由 UI 同步上下文回到
+    /// 派发线程。若在 UI 线程同步跑完整个循环，回调只在循环结束后才排队，
+    /// 进度条会「一步跳到 100%」而全程不动。
+    /// </remarks>
+    [RelayCommand]
+    public async Task Generate()
+    {
+        if (IsGenerating) return;
+        if (SelectedShader is not { } shader) return;
+
+        var plan = BuildPlan();
+        if (plan.Count == 0)
+        {
+            ProgressMessage = "没有可生成的内容：请先扫描并勾选贴图。";
+            return;
+        }
+
+        IsGenerating = true;
+        ProgressPercent = 0;
+        BuildSummary = string.Empty;
+        ProgressMessage = $"共 {plan.Count} 个材质待生成…";
+
+        _buildCts = new CancellationTokenSource();
+        try
+        {
+            var progress = new Progress<VmatBuildProgress>(p =>
+            {
+                ProgressPercent = p.Percent;
+                ProgressMessage = p.Message;
+            });
+
+            var result = await Task.Run(
+                () => VmatBuildService.BuildByGroup(shader, plan, BuildEffectiveRules(),
+                    AssetsRoot, ProjectRoot, progress, _buildCts.Token, overwriteExisting: false),
+                _buildCts.Token).ConfigureAwait(true);
+
+            BuildSummary = Describe(result);
+            ProgressPercent = 100;
+            ProgressMessage = BuildSummary;
+        }
+        catch (OperationCanceledException)
+        {
+            BuildSummary = "已取消生成。已写出的 .vmat 不会被回滚。";
+            ProgressMessage = BuildSummary;
+        }
+        catch (Exception ex)
+        {
+            ErrorLog.Error("生成 .vmat", nameof(Generate), ex);
+            BuildSummary = $"生成失败：{ex.Message}";
+            ProgressMessage = BuildSummary;
+        }
+        finally
+        {
+            _buildCts.Dispose();
+            _buildCts = null;
+            IsGenerating = false;
+        }
+    }
+
+    /// <summary>取消正在进行的生成。</summary>
+    [RelayCommand]
+    public void CancelGeneration()
+    {
+        if (_buildCts is { IsCancellationRequested: false }) _buildCts.Cancel();
+    }
+
+    /// <summary>
+    /// 把列表里勾选且命中的行，按最终分组名聚成生成计划。
+    /// </summary>
+    /// <remarks>
+    /// 用户的<b>手动指定优先</b>于自动基名——同一个 <c>wall_diff.png</c> 被分到
+    /// <c>wall</c> 还是 <c>wall_b</c>，由列表那一列说了算。
+    /// </remarks>
+    private Dictionary<string, List<string>> BuildPlan()
+    {
+        var plan = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var row in ScanRows)
+        {
+            if (!row.Include || !row.IsMatched) continue;
+            if (!plan.TryGetValue(row.GroupName, out var files))
+            {
+                files = new List<string>();
+                plan[row.GroupName] = files;
+            }
+            files.Add(row.FilePath);
+        }
+        return plan;
+    }
+
+    /// <summary>把生成结果汇总成一段可直接显示的中文说明。</summary>
+    private static string Describe(VmatBuildResult result)
+    {
+        var sb = new StringBuilder();
+        sb.Append($"生成 {result.WrittenFiles.Count} 个 .vmat，共 {result.TotalFiles} 张贴图。");
+        if (result.Conflicts.Count > 0) sb.Append($"　同槽位冲突 {result.Conflicts.Count} 处。");
+        if (result.SkippedExisting.Count > 0)
+            sb.Append($"　同名文件已存在、跳过 {result.SkippedExisting.Count} 个（未覆盖）。");
+        if (result.UnassignedFiles.Count > 0)
+            sb.Append($"　未写入 {result.UnassignedFiles.Count} 个。");
+        return sb.ToString();
+    }
+}

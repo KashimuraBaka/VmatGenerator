@@ -610,7 +610,132 @@ pwsh H:\dsh-workspace\vmat-generater\tools\scan_vmat.ps1
 
 ---
 
-## 6. 验收清单
+## 7. 拖拽导入 + 贴图后缀快速导航（后续轮次）
+
+> 面向使用者的完整说明见 **[`feature-dragdrop-suffix-usage.md`](feature-dragdrop-suffix-usage.md)**；
+> 契约规格见 **[`feature-dragdrop-suffix-spec.md`](feature-dragdrop-suffix-spec.md)**（v1.3 冻结）。
+> 本节只记录集成走查结论。
+
+### 7.1 功能范围
+
+| 层 | 新增 / 改动 |
+| --- | --- |
+| **Lib**（10 个新文件） | `TextureRole`（26 个角色）、`TextureRoleTokens`、`TextureRoleResolver`（P1–P5 五档）、`TextureSuffixMatcher`（归一化 + 匹配）、`TextureSuffixRule`、`VmatGeneratorSettings`（35 条种子）、`VmatGeneratorSettingsStore`（原子写盘 + 逐字段修复 + 损坏备份）、`TexturePathRules`、`TextureAssignment`（分配规划器 + 冲突裁定）、`DropImportService`（D1–D6 六类分档）、`TextureAssignmentSelfTest`（33 项） |
+| **GUI** | `MainWindow.xaml`：`AllowDrop` + 4 个拖拽事件 + 「工具(_T) → 贴图后缀快速导航(_Q)」+ 工具栏「快速导航」按钮 + 拖拽悬停覆盖层；「帮助(_H) → **贴图后缀自检(_S)**」新增入口 |
+| **GUI** | `QuickNavWindow.xaml(.cs)`、`ViewModels/QuickNavViewModel.cs`、`ViewModels/TextureSuffixRuleViewModel.cs`、`ViewModels/TextureResolutionMessages.cs` |
+| **GUI** | `ViewModels/MainViewModel.cs`（`Settings` / `QuickNav` / `LastDropResult` / `HandleDroppedPaths` / `OpenQuickNav`）、`ShaderEditorViewModel.cs`（`CurrentShader` / `TrySetTextureValue`）、`ParameterRowViewModel.cs`（`VectorParameter.RawText`） |
+
+### 7.2 集成阶段修掉的缺陷
+
+| # | 位置 | 问题 | 处理 |
+| --- | --- | --- | --- |
+| 1 | `GUI/ViewModels/QuickNavViewModel.cs` | 9 个编译错误：把 `GuardWithDialog<T>` 的**元组**当成 `T` 取成员；三参 `Guard` 只收 `Action` 却传了表达式；`SelectedRule is target` 因 `target` 已是局部变量而被解析成常量模式（CS9135） | 全部按 `ControlErrorRecorder` 的真实签名修正（元组解构 + `Guard<T>(…, fallback)` + `ReferenceEquals`） |
+| 2 | **`Lib/DropImportService.cs` `CollectDirectory`** | **真实功能缺陷**：`recurseTextureFolders == false` 时不仅跳过子目录贴图，**连顶层贴图也一起丢掉**，导致拖入贴图文件夹得到 0 张贴图、分档退化成 `Unsupported`——配置里这个开关等于把 D4 整个关死 | 改为 `recurseTextureFolders \|\| IsDirectChild(root, file)`，对齐规格 §2.2 D4 的 `TopDirectoryOnly` 语义；并新增回归用例 |
+| 3 | `Lib/*.cs`、`GUI/ViewModels/QuickNavViewModel.cs` | 三处 XML 注释仍写「§4 的 **28** 条种子规则」，实际已冻结为 35 条 | 更正为 35 |
+| 4 | `Lib/DropImportService.cs` `CanAccept` | 注释仍标「已知偏差，待 captain 裁决」 | v1.3 已裁决保持 `CanAccept(string[]?)`，注释改为记录裁决结果 |
+
+### 7.3 §9 验收场景走查
+
+| 场景 | 内容 | 验证方式 | 结果 |
+| --- | --- | --- | --- |
+| S1 | `csgo_environment` 拖入 `_normal` / `_diffuse` | 自检端到端用例 | ✅ `TextureNormal1` ← `wall/concrete_wall_normal.png`、`TextureColor1` ← `wall/concrete_wall_diffuse.png` |
+| S2 | `csgo_lightmappedgeneric` 同上 | 自检端到端用例 | ✅ `TextureLayer1Normal` / `TextureLayer1Color` |
+| S3 | 整名相等命中（`normal.png`） | 自检端到端用例 | ✅ `TextureNormal1`，值 `normal.png`（根下不加 `./`） |
+| S4 | `brick_normal` 与 `brick_n` 冲突 | 自检端到端用例 | ✅ 只写 `brick_normal`（更长后缀胜出），冲突列表含被淘汰项 |
+| S5 | `a_normal` 与 `b_normal` 冲突 | 自检端到端用例 | ✅ 按词数决胜保留 `a_normal` |
+| S6 | 水面着色器槽位归属 | 自检端到端用例 | ✅ `surf_foamnormal`→`TextureFoamNormal`、`debris`→`TextureDebris`；`foam_normal` **不写入** |
+| S7 | 水面着色器 `waves_normal` | 自检端到端用例 | ✅ 零写入，`UnresolvedReason = AmbiguousQualified`，候选 3 个 |
+| S8 | 贴图根之外的文件 | 自检端到端用例 | ✅ 写回原路径，不含 `..` |
+| S10 | `logo.png` 无规则命中 | 自检端到端用例 | ✅ 零写入 + 未命中列表 |
+| S12 | 同槽位多贴图 | 自检端到端用例 | ✅ 只写 `TextureMask1`，不写 `TextureMask2/3` |
+| §2.2 D1–D6 | 六类分档 + 两个根目录候选 | 自检用例 + GUI 层 harness | ✅ 六类全对；混合时材质根 = 第一个含 `.vmat` 的目录 |
+| **§2.2 D4 递归关闭** | 关闭 `recurseTextureFolders` 后拖入贴图文件夹 | 自检新增回归用例 | ✅ 顶层贴图仍被收集（1 张），子目录贴图跳过并在摘要说明 |
+| 三个真实着色器 × Normal/Color/Roughness | 规格 §5.5 锁定示例 | harness 逐条比对 | ✅ environment → `TextureNormal1`/`Color1`/`Roughness1`(均 P2)；lightmappedgeneric → `TextureLayer1Normal`/`Color1`/`Roughness1`(均 P3)；water_fancy → 三者均**未解析**（Normal 为 3 候选歧义，Color/Roughness 为模板无对应键） |
+| 配置持久化 | 保存 → 重建 `MainViewModel`（等价重启）→ 生效 | GUI 层 harness | ✅ 贴图根 / 着色器 / 两个开关 / 自定义规则全部还原；「重新载入」正确丢弃未保存改动 |
+| 跨层接线 | 菜单项与工具栏入口各触发一次 | XAML 结构扫描 + harness | ✅ 全仓库 5 个 XAML 中**没有任何控件同时设置 `Click` 与 `Command`**；菜单走 `Click`，工具栏走 `Command` |
+| KV 预览即时刷新 | 拖拽赋值后预览区更新 | GUI 层 harness | ✅ 写入前后对比 `GeneratedText`，赋值 → `PropertyChanged` → `RebuildText` 链路通 |
+| `VectorParameter.RawText` 不变式 | `RawText` 为空时输出逐字不变 | 静态统计 + 穷举 + harness | ✅ 见下 |
+
+### 7.4 `VectorParameter.RawText` 回归核对
+
+**不变式**：`RawText` 为空时 `WriteValue` 的输出必须与改动前**逐字一致**。
+
+| 核对项 | 结果 |
+| --- | --- |
+| `ShaderCatalog` 中 `ShaderParamKind.Vector` 出现次数 | **76** |
+| 其中 `Shape == TextureOrVector` | **9** |
+| 真·向量参数（Shape 保持 `Scalar`） | **67 次**（去重后 **33 个不同键名**） |
+| 分配器可产出的候选键（`Kind == Texture \|\| Shape == TextureOrVector`） | **37** |
+| **候选键 ∩ 真·向量参数** | **0（空集）** ← 结构上不可能拿到 `RawText` |
+| 其中 `Kind == Vector` 的候选键 | 4 个：`TextureRoughness1`、`TextureTranslucency`、`TextureRimMask`、`TextureFoamNormal`（全部 `TextureOrVector`） |
+| harness 实测 `g_vColorTint` 输出 | `[1.000000 1.000000 1.000000 0.000000]`（与改动前逐字一致，`RawText` 恒空） |
+| harness 实测 `TextureRoughness1` 写入贴图路径 | 存入 `RawText`，`WriteValue` 原样输出，重新打开材质不丢值 |
+
+`RawText` 有且只有两个写入点：`TrySetRawText`（仅拖拽导入路径调用）与
+`ShaderEditorViewModel.BuildRow`（额外要求 `p.Shape == TextureOrVector`）。两者都排除了真·向量参数。
+
+### 7.5 三条「预留规则」：当前一个着色器也用不上（非缺陷）
+
+出厂种子表 35 条里有 **4 条指向 3 个语义槽位**，而这 3 个槽位在**当前全部 11 个模板上都没有对应参数键**：
+
+| 后缀 | 语义槽位 | 当前 11 个模板为何写不进 | 状态 |
+| --- | --- | --- | --- |
+| `_emissive` / `_selfillum` | Emissive | `TextureEmissive` 在 ShaderCatalog 中出现 **0** 次 | 预留 |
+| `_waves` | WavesMask | `TextureWaves` 出现 **0** 次（水面遮罩键为 `TextureFoam`） | 预留 |
+| `_lightmap` | Lightmap | `LightMapTextureName` 出现 3 次但不以 `Texture` 开头，**不满足 §5.1 条件①**，永不成为候选 | 预留 |
+
+拖入这 4 类后缀的贴图不会写入任何参数，程序给出诚实的 `NoMatchingKey` 诊断
+（「该着色器没有通用的 Emissive 槽位」），**不会猜一个相近的键写进去**。
+
+**captain 裁决（t4 收尾）：规则保留，不删除、不改指、不改条数。**删除等于过拟合今天这份
+着色器目录；将来新增带 `TextureEmissive` / `TextureWaves` 的模板时这些规则立即可用。
+需要修正的是**文档表述**而非规则本身：规格 §4 备注列原文「笔刷光照贴图（**通常**不自动写入）」
+措辞误导——「通常」暗示「有时能写」，而事实是当前 11 个模板**一个都写不进**。
+规格 §4 备注列已转 architect 更正。
+
+此外 `_mask` 与 `_cube` 是「跟着着色器走」的（`_mask` 在 `effects`→`TextureMask1`、
+在 `environment`→`TextureTintMask1`、在 `character`→`TextureRimMask`；`_cube` 在
+`moondome`→`TextureCubeMap`、在 `water_fancy`→`TextureLowEndCubeMap`）。
+这是**设计意图而非缺陷**（captain 裁决），全部由实跑数据得出，非按键名推测。
+逐条实测数据见 `feature-dragdrop-suffix-usage.md` §3。
+
+> 是否改指到其他语义槽位属于规格级变更，本轮未擅自调整。
+
+### 7.6 永久自检入口
+
+`帮助 → 贴图后缀自检(_S)` 调用 `Lib.TextureAssignmentSelfTest.Run()`，展示逐条 PASS/FAIL 与统计。
+在此之前这 33 项只能靠一个一次性 `%TEMP%` console 工程运行，而该工程已被清理——
+规格 §11 的契约事实上无人能重跑。新增这个入口后无需新工程、无需 NuGet、无需改 `.csproj`。
+
+**安全性**：所有涉及文件的用例都在 `Path.GetTempPath()` 下的独立沙箱中执行并在 `finally` 清理，
+**不读写用户真实的 `%APPDATA%\VmatGenerator\settings.json`**。
+
+### 7.7 本轮约束遵守情况
+
+- ✅ `dotnet build VmatGenerator.sln -c Debug` → **0 错误 0 警告**；
+- ✅ 未修改任何 `*.csproj` 与 `VmatGenerator.sln`，未引入新的 NuGet 包；
+- ✅ `DropImportService.CanAccept(string[]?)` 保持 captain v1.3 裁决，未回退为 `IDataObject`；
+- ✅ 同一控件未同时设置 `Click` 与 `Command`；
+- ✅ §4 种子 35 条、§5.2 角色 26 个、§5.6.2 P5 候选 10 项均未改动；
+- ✅ 自检用例由 31 增至 **33**（新增 §2.2 D1–D6 分档用例与 D4 递归关闭回归用例，
+  均为修复缺陷 2 的必要回归保护）。**captain t4 收尾裁决：保留 33，不回退到 31**——
+  冻结用例总数在修完缺陷之后是本末倒置；真正需要冻结的四个契约数字（35 / 26 / 10 / 13）本轮一个未动。
+
+### 7.8 口径更正：`ShaderCatalog` 是 11 个模板，不是 10 个
+
+`ShaderCatalog.All` 实为 **11** 个模板：9 个 `csgo_*`（environment / vertexlitgeneric / complex /
+static_overlay / lightmappedgeneric / character / water_fancy / moondome / effects）
++ `sky.vfx` + `generic.vfx`。
+
+t1 规格与后续分派沿用了「10 个着色器」的说法，属**漏数**（captain 已确认并致歉，
+规格口径清扫已转 architect）。`ShaderCatalog.cs` 本轮**未被任何人改动**，这是既有事实。
+
+> **不影响任何冻结契约**：§5.6.2 的 P5 闭合表是按「可作 P5 候选的 channel」枚举的，
+> 与模板总数无关，captain 已独立穷举验证 10 项完备。
+
+---
+
+## 8. 验收清单
 
 | 验收项 | 结果 |
 |---|---|

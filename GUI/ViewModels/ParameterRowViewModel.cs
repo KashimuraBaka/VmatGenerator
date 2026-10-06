@@ -110,6 +110,25 @@ public sealed partial class VectorParameter : ParameterRowViewModel
         _w = initial.W;
     }
 
+    /// <summary>
+    /// 构造一个携带<b>原文</b>的向量行。
+    ///
+    /// 「贴图 ↔ 常量 vec4」双形态键（如 <c>TextureRoughness1</c>、<c>TextureFoamNormal</c>）
+    /// 既能写常量、也能写贴图路径。这类值 <c>Vector4.TryParse</c> 解析不了，
+    /// 因此用本字段原样保留，重新打开材质时也不会丢。
+    /// </summary>
+    public VectorParameter(ShaderParamTemplate t, Vector4 initial, string rawText) : this(t, initial)
+    {
+        _rawText = rawText;
+    }
+
+    /// <summary>
+    /// 覆盖输出的原文（通常是贴图路径）。<b>为空时行为与原先完全一致</b>，
+    /// 仍然输出 X/Y/Z/W 组成的 vec4 常量。
+    /// </summary>
+    [ObservableProperty]
+    private string _rawText = string.Empty;
+
     [ObservableProperty] private double _x;
     [ObservableProperty] private double _y;
     [ObservableProperty] private double _z;
@@ -117,9 +136,54 @@ public sealed partial class VectorParameter : ParameterRowViewModel
 
     public override string EditorKind => "Vector";
 
+    /// <summary>
+    /// 写出向量行的值。
+    ///
+    /// <b>向后兼容不变式（review 请重点核对这一行）</b>：
+    /// <code>
+    /// RawText 为空  →  target[Key] = new Vector4(X, Y, Z, W).ToString()
+    /// </code>
+    /// 与改动前<b>逐字一致</b>。之所以能保证，是因为 <see cref="RawText"/> 有且只有两个写入点，
+    /// 两者都排除了真·向量参数：
+    /// <list type="number">
+    /// <item><see cref="TrySetRawText"/> —— 仅由 <c>ShaderEditorViewModel.TrySetTextureValue</c>
+    /// 的拖拽导入路径调用，而分配器只会产出 §5 的贴图参数键（全部以 <c>Texture</c> 开头）。</item>
+    /// <item><c>ShaderEditorViewModel.BuildRow</c> —— 额外要求
+    /// <c>p.Shape == ShaderValueShape.TextureOrVector</c>。</item>
+    /// </list>
+    /// <c>ShaderCatalog</c> 的实测统计（可按下列脚本复核）：
+/// <code>
+/// $v = Get-Content Lib\ShaderCatalog.cs | Select-String 'ShaderParamKind\.Vector,'
+/// $t = $v | Select-String 'ShaderValueShape\.TextureOrVector'
+/// $v.Count=76   $t.Count=9   ($v.Count - $t.Count)=67
+/// </code>
+/// <list type="bullet">
+/// <item><b>出现次数</b> 76 处 <see cref="ShaderParamKind.Vector"/>，其中 <b>67</b> 处是真·向量参数
+/// （<c>g_vColorTint</c> / <c>g_vTexCoord*</c> / <c>g_vWater*</c> / <c>g_vMask*</c> / …），
+/// <c>Shape</c> 保持默认的 <see cref="ShaderValueShape.Scalar"/>，
+/// <see cref="RawText"/> 恒为空 —— 渲染结果与改动前完全相同。</item>
+/// <item>剩余 <b>9 处</b>才是 <c>TextureOrVector</c>，但它们只涉及 <b>6 个不同的键名</b>
+/// （<c>TextureColor</c> ×2、<c>TextureFoamNormal</c> ×1、<c>TextureRimMask</c> ×1、
+/// <c>TextureRoughness1</c> ×1、<c>TextureSelfIllumMask</c> ×2、<c>TextureTranslucency</c> ×2）。
+/// 注意区分「出现次数」与「不同键名」两个口径。</item>
+/// </list>
+    /// </summary>
     public override void WriteValue(IDictionary<string, string> target)
     {
-        target[Key] = new Vector4((float)X, (float)Y, (float)Z, (float)W).ToString();
+        target[Key] = !string.IsNullOrEmpty(RawText)
+            ? RawText
+            : new Vector4((float)X, (float)Y, (float)Z, (float)W).ToString();
+    }
+
+    /// <summary>
+    /// 写入一条无法解析为 vec4 的原文（拖拽导入的贴图路径走这里）。
+    /// 返回是否写入成功，<b>不抛异常</b>。
+    /// </summary>
+    public bool TrySetRawText(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return false;
+        RawText = text;
+        return true;
     }
 }
 
