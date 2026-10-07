@@ -26,10 +26,10 @@ namespace Lib;
 /// ValveKeyValue — the canonical Source 2 KeyValues library — and writes with the
 /// same library's serializer, so formatting can never change the document's meaning.
 ///
-/// <para><b>写出走 KV3，读取 KV1 / KV3 都接受。</b>
-/// Source 2 的 .vmat 是 KeyValues3。KV3 文本必须带
-/// <c>&lt;!-- kv3 encoding:text:version{…} --&gt;</c> 头，缺头库会直接抛异常；
-/// 而本工具历史上写出的 KV1 文件没有这个头，所以解析必须按内容先判定格式。</para>
+/// <para><b>写出走 KV1，读取 KV1 / KV3 都接受。</b>
+/// 写出固定输出 KeyValues1 文本（顶层键 <c>"Layer0"</c>，无文件头）。
+/// KV3 文本必须带 <c>&lt;!-- kv3 encoding:text:version{…} --&gt;</c> 头，缺头库会直接抛异常，
+/// 所以解析仍要先按内容判定格式；读到 KV3 文档时写回会转成 KV1。</para>
 ///
 /// <para><b>Known limitations</b> (inherited from ValveKeyValue 0.71):</para>
 /// <list type="bullet">
@@ -101,8 +101,39 @@ public static class VmatFormatter
         foreach (var entry in document.Root)
             collection.Add(entry.Key ?? string.Empty, entry.Value);
 
+        // KV1 把文档名逐字写成正文的顶层键。KV1 来源的文档带着该键（"Layer0"），
+        // 直接照写即可；KV3 来源的文档顶层是匿名对象、没有文档名，此时若正文恰好
+        // 只有一个集合子节点，就拿它的键当文档名并把它的子节点升为正文，
+        // 避免写出空引号 "" 当顶层键——即完成 KV3 → KV1 的转换。
+        string name = document.Name ?? string.Empty;
+        var body = collection;
+        if (name.Length == 0)
+        {
+            var first = default(KeyValuePair<string, KVObject>);
+            bool single = false;
+            using (var e = collection.GetEnumerator())
+            {
+                if (e.MoveNext())
+                {
+                    first = e.Current;
+                    single = !e.MoveNext() && first.Value.ValueType == KVValueType.Collection;
+                }
+            }
+            if (single)
+            {
+                name = first.Key;
+                body = KVObject.ListCollection();
+                foreach (var entry in first.Value)
+                    body.Add(entry.Key ?? string.Empty, entry.Value);
+            }
+            else
+            {
+                name = "Layer0";
+            }
+        }
+
         using var ms = new MemoryStream();
-        Kv3Serializer.Serialize(ms, collection, document.Name ?? string.Empty);
+        Kv1Serializer.Serialize(ms, body, name);
         return Encoding.UTF8.GetString(ms.ToArray());
     }
 

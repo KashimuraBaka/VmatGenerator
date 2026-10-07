@@ -9,12 +9,13 @@ namespace Lib;
 /// the UI can bind to (<see cref="VmatNode"/>) and to ingest <see cref="VmatNode"/>
 /// trees produced by the editor / <see cref="VmatGenerator"/>.
 ///
-/// <para><b>写出用 KV3，读取同时兼容 KV1 与 KV3。</b>
-/// Source 2 的 .vmat 是 KeyValues3，ValveKeyValue 0.71 也提供
-/// <see cref="KVSerializationFormat.KeyValues3Text"/>；但 KV3 文本<b>必须</b>以
-/// <c>&lt;!-- kv3 encoding:text:version{…} format:generic:version{…} --&gt;</c> 头开头，
-/// 缺头直接抛 <see cref="KeyValueException"/>。本工具历史上写出的是 KV1 文本，
-/// 用户磁盘上的既有文件没有这个头，因此读取必须两条路都走。</para>
+/// <para><b>写出用 KV1，读取同时兼容 KV1 与 KV3。</b>
+/// 写出固定使用 <see cref="KVSerializationFormat.KeyValues1Text"/>：文档名会被库写成
+/// 正文的顶层键（<c>"Layer0" { … }</c>），不需要 KV3 那种
+/// <c>&lt;!-- kv3 encoding:text:version{…} format:generic:version{…} --&gt;</c> 头。
+/// 读取仍两条路都要走——KV3 文本<b>必须</b>以该头开头（缺头直接抛
+/// <see cref="KeyValueException"/>），而磁盘上的既有文件多半是没有这个头的 KV1，
+/// 因此先按内容判定格式再解析。</para>
 /// </summary>
 public static class KvAdapter
 {
@@ -62,32 +63,38 @@ public static class KvAdapter
     }
 
     /// <summary>
-    /// Serialize a <see cref="VmatNode"/> to <b>KV3</b> text via ValveKeyValue.
+    /// Serialize a <see cref="VmatNode"/> to <b>KV1</b> text via ValveKeyValue.
     /// </summary>
     /// <remarks>
-    /// <para><b>为什么必须显式包一层 Layer0：</b>KV1 会把文档名写进正文
-    /// （<c>"Layer0" { … }</c>），而 KV3 的文件顶层是一个<b>匿名对象</b>——
-    /// 库不会为文档名产出任何节点，传进去的名字只用于回读时还原，正文里并不出现。
-    /// 不手动补的话结果会是裸的 <c>{ shader = … }</c>，缺少 Source 2 要求的
-    /// <c>Layer0</c> 层，引擎认不出这些参数。</para>
+    /// <para><b>文档名就是顶层键：</b>KV1 会把传给库的文档名逐字写成正文的第一层
+    /// （<c>"Layer0" { … }</c>），所以这里把根节点的键（缺省用 <c>Layer0</c>）作为
+    /// 文档名传入、把它的直接子节点集合作为正文载荷，输出恰好一层 <c>Layer0</c>，
+    /// 与 Valve 出厂材质逐字节同形。这与 KV3 相反——KV3 顶层是匿名对象、不写文档名，
+    /// 才需要手工补一层 <c>Layer0</c> 节点。</para>
     /// </remarks>
     public static string SerializeViaValve(VmatNode root)
     {
-        var payload = KVObject.ListCollection();
+        string documentName = string.IsNullOrEmpty(root.Key) ? Layer0Key : root.Key;
+
+        KVObject payload;
         if (root.IsContainer)
         {
+            // 容器根：根键交给文档名，正文只放子节点，避免 Layer0 出现两层。
             var inner = KVObject.ListCollection();
             foreach (var child in root.Children)
                 inner.Add(child.Key, ToKVObjectInternal(child));
-            payload.Add(string.IsNullOrEmpty(root.Key) ? Layer0Key : root.Key, inner);
+            payload = inner;
         }
         else
         {
-            payload.Add(root.Key, ToKVObjectInternal(root));
+            // 叶子根（理论形态）：包一层集合，键名照常写入正文。
+            var wrapped = KVObject.ListCollection();
+            wrapped.Add(documentName, ToKVObjectInternal(root));
+            payload = wrapped;
         }
 
         using var ms = new MemoryStream();
-        Kv3Serializer.Serialize(ms, payload, string.Empty);
+        Kv1Serializer.Serialize(ms, payload, documentName);
         ms.Position = 0;
         using var sr = new StreamReader(ms);
         return sr.ReadToEnd();
@@ -122,13 +129,14 @@ public static class KvAdapter
     // ─── internal helpers ───────────────────────────────────────────────────
 
     /// <summary>
-    /// 把库返回的文档转成本库的节点树，并把 KV3 正文里的 <c>Layer0</c> 提升为根节点。
+    /// 把库返回的文档转成本库的节点树，必要时把正文里的 <c>Layer0</c> 提升为根节点。
     /// </summary>
     /// <remarks>
     /// 本库的内存模型是「根节点自己就叫 <c>Layer0</c>，参数是它的直接子节点」
     /// （<see cref="VmatDocument.ShaderName"/> 就依赖这一点在根的子节点里找 shader）。
-    /// 而 KV3 文件的顶层是匿名对象、<c>Layer0</c> 是正文中一个真实子节点。
-    /// 两者形状不同，不做这一步提升，KV3 文件读进来就会变成「无名根 + 一个 Layer0 子节点」，
+    /// KV1 文件把文档名写进正文，读回来天然就是「名为 Layer0 的根」，无需提升；
+    /// 而 KV3 文件的顶层是匿名对象、<c>Layer0</c> 是正文中一个真实子节点，
+    /// 不做这一步提升，KV3 文件读进来就会变成「无名根 + 一个 Layer0 子节点」，
     /// 编辑器随后找不到 shader。
     /// <para>只在「正好一个 Layer0 子节点」时提升；出现 Layer1 等多层时保持原样，
     /// 因为本库的内存模型只承载单根。</para>

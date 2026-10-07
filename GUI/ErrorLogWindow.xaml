@@ -39,6 +39,14 @@
                   SelectionMode="Single"
                   SelectionChanged="OnSelectionChanged"
                   FontSize="12">
+            <!-- 与主窗口贴图列表同一处修复：不用系统高亮色画选中带，
+                 否则窗口失焦时选中行会变成一条白色横带、文字变浅灰。 -->
+            <DataGrid.Resources>
+                <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#663A7BD9" />
+                <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="#FFFFFFFF" />
+                <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="#333A7BD9" />
+                <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}" Color="#FFE8E8E8" />
+            </DataGrid.Resources>
             <DataGrid.Columns>
                 <DataGridTextColumn Header="时间"   Binding="{Binding TimeText}"     Width="180" />
                 <DataGridTextColumn Header="级别"   Binding="{Binding SeverityText}" Width="60"  />

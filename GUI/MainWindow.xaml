@@ -34,21 +34,50 @@
              AccentFillColorDefaultBrush 这类主题键在本项目里并无定义（DynamicResource
              解析不到只会静默变透明，不会报错），自己定义才能保证高亮一定显示得出来。 -->
         <SolidColorBrush x:Key="StepActiveBrush" Color="#FF3A7BD9" Opacity="0.28" />
-        <!-- 步骤条：默认灰底，当前步骤高亮。未到过的步骤也可点击（向导允许跳回去改）。 -->
+        <SolidColorBrush x:Key="StepActiveBorderBrush" Color="#FF3A7BD9" Opacity="0.85" />
+        <!-- 步骤条基础样式：只放公共外观，<b>不放任何触发器</b>。
+             三个格子共用本样式，「谁是当前步骤」必须逐格判断：触发器写进共用样式的话
+             每个格子都会命中 1/2/3 之一 → 三格同时高亮，等于没有高亮（原实现的毛病）。
+             当前步骤的判断放在下面 Step1/2/3ItemStyle 三个派生样式里，各自只认自己的值。
+
+             Opacity 走低亮对比：非当前步骤整块变暗（底色本就透明，暗的是文字与图标）。
+             用元素自己的 Opacity 而不是继承的 Foreground —— Fluent 主题的隐式
+             TextBlock 样式自带 Foreground 设值器，优先级高于继承，灰色会被静默覆盖。 -->
         <Style x:Key="StepItemStyle" TargetType="Border">
             <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="1" />
             <Setter Property="Padding" Value="18,10" />
             <Setter Property="CornerRadius" Value="6" />
             <Setter Property="Margin" Value="0,0,6,0" />
+            <Setter Property="SnapsToDevicePixels" Value="True" />
+            <Setter Property="Opacity" Value="0.55" />
+        </Style>
+        <!-- 未到过的步骤也可点击（向导允许跳回去改），点击行为挂在各自格子的事件上。 -->
+        <Style x:Key="Step1ItemStyle" TargetType="Border" BasedOn="{StaticResource StepItemStyle}">
             <Style.Triggers>
                 <DataTrigger Binding="{Binding StepIndex}" Value="1">
                     <Setter Property="Background" Value="{StaticResource StepActiveBrush}" />
+                    <Setter Property="BorderBrush" Value="{StaticResource StepActiveBorderBrush}" />
+                    <Setter Property="Opacity" Value="1" />
                 </DataTrigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="Step2ItemStyle" TargetType="Border" BasedOn="{StaticResource StepItemStyle}">
+            <Style.Triggers>
                 <DataTrigger Binding="{Binding StepIndex}" Value="2">
                     <Setter Property="Background" Value="{StaticResource StepActiveBrush}" />
+                    <Setter Property="BorderBrush" Value="{StaticResource StepActiveBorderBrush}" />
+                    <Setter Property="Opacity" Value="1" />
                 </DataTrigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="Step3ItemStyle" TargetType="Border" BasedOn="{StaticResource StepItemStyle}">
+            <Style.Triggers>
                 <DataTrigger Binding="{Binding StepIndex}" Value="3">
                     <Setter Property="Background" Value="{StaticResource StepActiveBrush}" />
+                    <Setter Property="BorderBrush" Value="{StaticResource StepActiveBorderBrush}" />
+                    <Setter Property="Opacity" Value="1" />
                 </DataTrigger>
             </Style.Triggers>
         </Style>
@@ -74,16 +103,7 @@
         <!-- ─── 步骤条 ────────────────────────────────────────────────────── -->
         <Border Grid.Row="0" Padding="0,0,0,10">
             <StackPanel Orientation="Horizontal">
-                <Border>
-                    <Border.Style>
-                        <Style TargetType="Border" BasedOn="{StaticResource StepItemStyle}">
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding StepIndex}" Value="1">
-                                    <Setter Property="Background" Value="{StaticResource StepActiveBrush}" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Border.Style>
+                <Border Style="{StaticResource Step1ItemStyle}">
                     <StackPanel Orientation="Horizontal" Cursor="Hand" MouseLeftButtonUp="OnStep1Clicked">
                         <TextBlock Text="①" FontSize="16" Margin="0,0,8,0" />
                         <StackPanel>
@@ -92,16 +112,7 @@
                         </StackPanel>
                     </StackPanel>
                 </Border>
-                <Border>
-                    <Border.Style>
-                        <Style TargetType="Border" BasedOn="{StaticResource StepItemStyle}">
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding StepIndex}" Value="2">
-                                    <Setter Property="Background" Value="{StaticResource StepActiveBrush}" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Border.Style>
+                <Border Style="{StaticResource Step2ItemStyle}">
                     <StackPanel Orientation="Horizontal" Cursor="Hand" MouseLeftButtonUp="OnStep2Clicked">
                         <TextBlock Text="②" FontSize="16" Margin="0,0,8,0" />
                         <StackPanel>
@@ -110,16 +121,7 @@
                         </StackPanel>
                     </StackPanel>
                 </Border>
-                <Border>
-                    <Border.Style>
-                        <Style TargetType="Border" BasedOn="{StaticResource StepItemStyle}">
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding StepIndex}" Value="3">
-                                    <Setter Property="Background" Value="{StaticResource StepActiveBrush}" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Border.Style>
+                <Border Style="{StaticResource Step3ItemStyle}">
                     <StackPanel Orientation="Horizontal" Cursor="Hand" MouseLeftButtonUp="OnStep3Clicked">
                         <TextBlock Text="③" FontSize="16" Margin="0,0,8,0" />
                         <StackPanel>
@@ -357,7 +359,7 @@
                     <TextBlock Margin="10,4,0,0" FontSize="11" Opacity="0.75"
                                TextWrapping="Wrap" Text="{Binding ScanSummary}" />
                 </StackPanel>
-                <!-- 左：贴图列表；右：选中材质的 KeyValues3 预览 -->
+                <!-- 左：贴图列表；右：选中材质的 KeyValues1 预览 -->
                 <Grid Grid.Row="1" Margin="0,10,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="3*" MinWidth="640" />
@@ -379,6 +381,18 @@
                               VirtualizingPanel.IsVirtualizing="True"
                               VirtualizingPanel.VirtualizationMode="Recycling"
                               FontSize="12">
+                        <!-- 选中行的底色修复。WPF 内置的 DataGrid 行/格选中样式用系统色画选中带：
+                             有焦点走 Highlight（亮蓝）、窗口失焦走 InactiveSelectionHighlight（浅灰白）。
+                             深色主题下后者就是一条刺眼的白色横带，文字还同时变浅灰 —— 就是
+                             「列表里多出一行白色」的成因。在表格自己的资源里覆盖这四个系统色键，
+                             作用于表内所有画选中的地方（行带、单元格、单元格文字），
+                             且随窗口焦点两种状态都用同一套深色主题色。 -->
+                        <DataGrid.Resources>
+                            <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#663A7BD9" />
+                            <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="#FFFFFFFF" />
+                            <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="#333A7BD9" />
+                            <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}" Color="#FFE8E8E8" />
+                        </DataGrid.Resources>
                         <DataGrid.Columns>
                             <DataGridTemplateColumn Header="生成" Width="46">
                                 <DataGridTemplateColumn.CellTemplate>
@@ -522,16 +536,23 @@
                                     </Style>
                                 </DataGridTextColumn.ElementStyle>
                             </DataGridTextColumn>
-                            <!-- 归属可改：同一张贴图被两个材质共用时，不必去动后缀规则 -->
-                            <DataGridTemplateColumn Header="归属的 .vmat" Width="132">
+                            <!-- 归属可改：同一张贴图被两个材质共用时，不必去动后缀规则。
+                                 格子里写的是第三步真正写出的 .vmat 文件名（带扩展名），
+                                 编辑提交时扩展名会被剥掉再存进分组名，见 VmatFileName。
+                                 组合框候选 = 该行贴图所在文件夹下实际存在的全部 .vmat 文件，
+                                 用户也可以直接输入一个新名字——给新材质添第一张贴图就走这条路。 -->
+                            <DataGridTemplateColumn Header="输出的 .vmat 文件名" Width="168">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
-                                        <TextBox Margin="2" BorderThickness="0"
-                                                 HorizontalAlignment="Stretch"
-                                                 VerticalAlignment="Center"
-                                                 TextAlignment="Center"
-                                                 Text="{Binding GroupNameOverride, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
-                                                 ToolTip="留空表示使用自动归类的基名" />
+                                        <ComboBox Margin="2,0" FontSize="12"
+                                                  IsEditable="True"
+                                                  StaysOpenOnEdit="True"
+                                                  IsTextSearchEnabled="False"
+                                                  VerticalAlignment="Center"
+                                                  HorizontalAlignment="Stretch"
+                                                  Text="{Binding VmatFileName, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                  ItemsSource="{Binding MaterialNameOptions}"
+                                                  ToolTip="这份贴图写进哪个 .vmat。下拉里是这张贴图所在文件夹里现有的 .vmat 文件，也可以直接输入新名字；.vmat 扩展名会自动保留，清空则恢复到自动归类的基名。" />
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>

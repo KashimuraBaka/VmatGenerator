@@ -66,6 +66,9 @@ public sealed class VmatBuildResult
     /// <param name="unresolvedRoles">命中规则但无法确定参数键的角色。</param>
     /// <param name="totalFiles">本次输入的文件总数。</param>
     /// <param name="skippedExisting">因目标已存在而<b>未写入</b>的路径。</param>
+    /// <param name="copiedImageFiles">随材质复制出去的贴图目标路径。</param>
+    /// <param name="skippedImageCopies">因已存在且未允许覆盖而未复制的贴图路径。</param>
+    /// <param name="missingBaseColorGroups">因组内没有颜色贴图而整体跳过的材质名。</param>
     public VmatBuildResult(
         IReadOnlyList<string> writtenFiles,
         IReadOnlyList<VmatBuildGroup> groups,
@@ -73,7 +76,10 @@ public sealed class VmatBuildResult
         IReadOnlyList<TextureConflict> conflicts,
         IReadOnlyList<TextureRoleResolution> unresolvedRoles,
         int totalFiles,
-        IReadOnlyList<string> skippedExisting)
+        IReadOnlyList<string> skippedExisting,
+        IReadOnlyList<string>? copiedImageFiles = null,
+        IReadOnlyList<string>? skippedImageCopies = null,
+        IReadOnlyList<string>? missingBaseColorGroups = null)
     {
         WrittenFiles = writtenFiles;
         Groups = groups;
@@ -82,6 +88,9 @@ public sealed class VmatBuildResult
         UnresolvedRoles = unresolvedRoles;
         TotalFiles = totalFiles;
         SkippedExisting = skippedExisting;
+        CopiedImageFiles = copiedImageFiles ?? Array.Empty<string>();
+        SkippedImageCopies = skippedImageCopies ?? Array.Empty<string>();
+        MissingBaseColorGroups = missingBaseColorGroups ?? Array.Empty<string>();
     }
 
     /// <summary>已写出的 <c>.vmat</c> 路径（与 <see cref="VmatBuildGroup.TargetPath"/> 一致）。</summary>
@@ -113,6 +122,18 @@ public sealed class VmatBuildResult
     /// 宁可跳过并在界面上明确告知，也不要替用户做这个决定。
     /// </remarks>
     public IReadOnlyList<string> SkippedExisting { get; }
+
+    /// <summary>随材质一并复制到输出目录的<b>贴图文件</b>目标路径（只有 <see cref="VmatBuildService.BuildByGroup"/> 会填）。</summary>
+    public IReadOnlyList<string> CopiedImageFiles { get; }
+
+    /// <summary>因目的地已存在且未允许覆盖而<b>未复制</b>的贴图路径。</summary>
+    public IReadOnlyList<string> SkippedImageCopies { get; }
+
+    /// <summary>
+    /// 因组内<b>没有 basecolor（颜色）贴图</b>而整体跳过的材质名。
+    /// 颜色贴图是材质成立的底线，宁可不写也不产出没有底色的空壳材质。
+    /// </summary>
+    public IReadOnlyList<string> MissingBaseColorGroups { get; }
 }
 
 /// <summary>
@@ -236,15 +257,18 @@ public static class VmatBuildService
     /// 就是第三步会写出的内容——不存在「预览与实际不一致」这种最伤信任的偏差。
     /// <paramref name="projectRoot"/> 只决定写到哪里，不影响文本内容。
     /// </remarks>
+    /// <param name="roleOverrides">逐文件手动槽位覆盖，见 <see cref="TextureAssigner.Assign"/>。</param>
     public static string Preview(
         ShaderTemplate shader,
         IEnumerable<string> textureFilePaths,
         IReadOnlyList<TextureSuffixRule> rules,
         string? assetsRoot,
-        string? projectRoot)
+        string? projectRoot,
+        IReadOnlyDictionary<string, TextureRole>? roleOverrides = null)
     {
         var assign = TextureAssigner.Assign(
-            shader, textureFilePaths, rules ?? Array.Empty<TextureSuffixRule>(), assetsRoot);
+            shader, textureFilePaths, rules ?? Array.Empty<TextureSuffixRule>(), assetsRoot,
+            roleOverrides);
         return RenderGroup(shader, assign.Assignments);
     }
 
@@ -258,8 +282,9 @@ public static class VmatBuildService
     /// </remarks>
     /// <param name="plan">材质名 → 该材质包含的贴图文件路径。</param>
     /// <param name="assetsRoot">贴图根目录；<c>.vmat</c> 内写相对它的路径。</param>
-    /// <param name="projectRoot">.vmat 输出目录，与贴图所在位置无关。</param>
+    /// <param name="projectRoot">.vmat 输出根目录；输出会镜像贴图相对资产根的子目录。</param>
     /// <param name="overwriteExisting">同名 .vmat 已存在时是否覆盖；默认 <c>false</c>。</param>
+    /// <param name="roleOverrides">逐文件手动槽位覆盖，见 <see cref="TextureAssigner.Assign"/>。</param>
     public static VmatBuildResult BuildByGroup(
         ShaderTemplate shader,
         IReadOnlyDictionary<string, List<string>> plan,
@@ -268,7 +293,8 @@ public static class VmatBuildService
         string? projectRoot,
         IProgress<VmatBuildProgress>? progress = null,
         CancellationToken cancellationToken = default,
-        bool overwriteExisting = false)
+        bool overwriteExisting = false,
+        IReadOnlyDictionary<string, TextureRole>? roleOverrides = null)
     {
         var ruleList = rules ?? Array.Empty<TextureSuffixRule>();
         var written = new List<string>();
@@ -277,6 +303,9 @@ public static class VmatBuildService
         var conflicts = new List<TextureConflict>();
         var unresolved = new List<TextureRoleResolution>();
         var groups = new List<VmatBuildGroup>(plan.Count);
+        var copiedImages = new List<string>();
+        var skippedImages = new List<string>();
+        var missingBaseColor = new List<string>();
         var totalFiles = 0;
         var index = 0;
 
@@ -287,12 +316,26 @@ public static class VmatBuildService
             totalFiles += files.Count;
 
             // 冲突在「单个材质内部」裁定，分组之间互不影响。
-            var assign = TextureAssigner.Assign(shader, files, ruleList, assetsRoot);
+            var assign = TextureAssigner.Assign(shader, files, ruleList, assetsRoot, roleOverrides);
             conflicts.AddRange(assign.Conflicts);
             unresolved.AddRange(assign.UnresolvedRoles);
             unassigned.AddRange(assign.UnassignedFiles);
 
-            var group = new VmatBuildGroup(projectRoot ?? string.Empty, name, assign.Assignments);
+            // basecolor 是材质成立的底线：没有颜色贴图的组整体跳过，
+            // 绝不写出一份打开只剩默认白底、引擎里直接报错的空壳材质。
+            var baseColor = assign.Assignments.FirstOrDefault(a => a.Role == TextureRole.Color);
+            if (baseColor is null)
+            {
+                missingBaseColor.Add(name);
+                progress?.Report(new VmatBuildProgress(index, plan.Count,
+                    $"已跳过 {name}.vmat（组内没有 basecolor 颜色贴图，材质不成立）"));
+                continue;
+            }
+
+            // 输出目录 = 项目根 + basecolor 贴图相对资产根的子目录：
+            // 输出布局与资产布局一一对应，贴图也一并复制进同一文件夹。
+            var targetDir = ResolveOutputDirectory(projectRoot, assetsRoot, baseColor.FilePath);
+            var group = new VmatBuildGroup(targetDir, name, assign.Assignments);
             groups.Add(group);
 
             if (!overwriteExisting && File.Exists(group.TargetPath))
@@ -303,15 +346,64 @@ public static class VmatBuildService
                 continue;
             }
 
+            Directory.CreateDirectory(targetDir);
             File.WriteAllText(group.TargetPath, RenderGroup(shader, assign.Assignments));
             written.Add(group.TargetPath);
+
+            foreach (var a in assign.Assignments)
+            {
+                var dest = Path.Combine(targetDir, Path.GetFileName(a.FilePath));
+                if (string.Equals(Path.GetFullPath(dest), Path.GetFullPath(a.FilePath), StringComparison.OrdinalIgnoreCase))
+                    continue; // 项目根就设在贴图目录本身：已在原位，无需自我复制。
+                if (!overwriteExisting && File.Exists(dest))
+                {
+                    skippedImages.Add(dest);
+                    continue;
+                }
+                File.Copy(a.FilePath, dest, overwrite: true);
+                copiedImages.Add(dest);
+            }
 
             progress?.Report(new VmatBuildProgress(index, plan.Count,
                 $"正在处理 {index}/{plan.Count}：已生成 {name}.vmat（{assign.Assignments.Count} 张贴图）"));
         }
 
         return new VmatBuildResult(
-            written, groups, unassigned, conflicts, unresolved, totalFiles, skipped);
+            written, groups, unassigned, conflicts, unresolved, totalFiles, skipped,
+            copiedImages, skippedImages, missingBaseColor);
+    }
+
+    /// <summary>
+    /// 输出目录 = 项目根拼上 basecolor 贴图相对资产根的子目录；
+    /// 贴图不在资产根内（或没设资产根）时退到项目根本身。
+    /// </summary>
+    /// <remarks>
+    /// 以 <b>basecolor</b> 那张贴图的位置为准：一个材质的其它贴图被手动从别处并进来了，
+    /// 输出布局仍跟着材质本体走，而不是跟着某张贴图随机漂移。
+    /// </remarks>
+    private static string ResolveOutputDirectory(string? projectRoot, string? assetsRoot, string baseColorFilePath)
+    {
+        var root = string.IsNullOrWhiteSpace(projectRoot) ? Directory.GetCurrentDirectory() : projectRoot;
+        if (string.IsNullOrWhiteSpace(assetsRoot)) return root;
+
+        try
+        {
+            var textureDir = Path.GetDirectoryName(baseColorFilePath) ?? string.Empty;
+            var relative = Path.GetRelativePath(assetsRoot, textureDir);
+            if (relative is "." or ".."
+                || relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal)
+                || relative.StartsWith(".." + Path.AltDirectorySeparatorChar, StringComparison.Ordinal)
+                || Path.IsPathRooted(relative))
+            {
+                return root;
+            }
+            return Path.Combine(root, relative);
+        }
+        catch (ArgumentException)
+        {
+            // 非法路径字符等极端输入：退到项目根，让后面的写入自己抛出正常异常。
+            return root;
+        }
     }
 
     /// <summary>把分配结果渲染成最终文本。预览与写盘共用，保证两者一致。</summary>

@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
 using System.Text;
@@ -19,7 +19,7 @@ namespace GUI.ViewModels;
 /// <item>选择<b>目标着色器</b>、<b>资产文件夹</b>（扫描贴图的来源）与<b>项目文件夹</b>（.vmat 输出目录）；</item>
 /// <item>列出扫描到的全部图像，按「去掉后缀后的基名」自动归类到各个 .vmat，
 /// 允许逐行改后缀后重新扫描、也允许手动指定某张贴图属于哪个 .vmat；
-/// 右侧实时显示选中那份 .vmat 生成后的 KeyValues3 文本；</item>
+/// 右侧实时显示选中那份 .vmat 生成后的 KeyValues1 文本；</item>
 /// <item>开始生成，显示进度条与当前正在处理的内容。</item>
 /// </list>
 ///
@@ -61,7 +61,7 @@ public sealed partial class MainViewModel
     [ObservableProperty]
     private ScanRowViewModel? _selectedRow;
 
-    /// <summary>选中行所属 <c>.vmat</c> 生成后的 KeyValues3 文本预览。</summary>
+    /// <summary>选中行所属 <c>.vmat</c> 生成后的 KeyValues1 文本预览。</summary>
     [ObservableProperty]
     private string _selectedPreview = "（尚未扫描）";
 
@@ -291,6 +291,7 @@ public sealed partial class MainViewModel
         {
             row.GroupChanged -= OnRowGroupChanged;
             row.RoleChanged -= OnRowGroupChanged;
+            row.IncludeChanged -= OnRowGroupChanged;
         }
 
         var rules = BuildEffectiveRules();
@@ -344,10 +345,12 @@ public sealed partial class MainViewModel
             row.UpdateRoleOptions(supported);
             row.GroupChanged += OnRowGroupChanged;
             row.RoleChanged += OnRowGroupChanged;   // 槽位决定写哪个参数键，预览必须跟着变
+            row.IncludeChanged += OnRowGroupChanged; // 取消勾选可能让整个材质退出候选名单
             ScanRows.Add(row);
         }
 
         SelectedRow = ScanRows.FirstOrDefault(r => r.IsMatched);
+        RefreshMaterialNameOptions();
         RefreshMaterialPreview();
 
         _lastScannedAssetsRoot = AssetsRoot;
@@ -391,7 +394,96 @@ public sealed partial class MainViewModel
 
         return best;
     }
-    private void OnRowGroupChanged() => RefreshMaterialPreview();
+    private void OnRowGroupChanged()
+    {
+        // 材质名候选现在只取决于各行所在文件夹里的 .vmat 文件（扫描时算好），
+        // 改槽位、改归属、勾选都不会让它变，无需在这里重枚举。
+        RefreshMaterialPreview();
+    }
+
+    /// <summary>
+    /// 重算材质名下拉候选：每一行的候选 = <b>该行贴图所在文件夹下实际存在的 .vmat 文件</b>。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>为什么按文件夹枚举而不是用扫描出的分组名。</b>用户的资产目录里，
+    /// 现有材质就是贴图旁边的那些 <c>.vmat</c>；把散图并进同目录的现成材质
+    /// 是最常见的操作，下拉直接列这些名字最贴合意图。之前列的是
+    /// 「本次扫描里由 basecolor 定义的材质」，同目录几十个真实材质一个都不出现，
+    /// 反而全是别处目录的名字。</para>
+    ///
+    /// <para><b>候选不等于限制。</b>组合框可编辑，输入一个新名字同样有效——
+    /// 那仍是给新材质添第一张贴图的路径。没有颜色贴图的材质名照旧会在
+    /// 生成端被整体跳过（basecolor 是材质成立的必要条件）。</para>
+    ///
+    /// <para>同一目录只枚举一次，同目录的行共享同一份列表实例；
+    /// 推给每一行而不是放 VM 上：行没有回引用，
+    /// 与 <see cref="ScanRowViewModel.RoleOptions"/> 同一套「列表的一方推给行」模式。</para>
+    /// </remarks>
+    private void RefreshMaterialNameOptions()
+    {
+        var byDir = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var row in ScanRows)
+        {
+            if (!byDir.TryGetValue(row.RelativeDirectory, out var names))
+            {
+                names = ListVmatFileNamesIn(row.RelativeDirectory);
+                byDir[row.RelativeDirectory] = names;
+            }
+
+            row.UpdateMaterialNames(names);
+        }
+    }
+
+    /// <summary>
+    /// 枚举某个资产子目录（相对资产根）下的全部 <c>.vmat</c> 文件名，带扩展名、已排序。
+    /// </summary>
+    /// <remarks>
+    /// 只枚举该目录一层（不含子目录）——「当前文件夹」就是字面意思，
+    /// 子目录的材质属于子目录自己那些行的候选。目录不存在或读不了时返回空列表：
+    /// 下拉空着不算错，输入新名字的路径依然畅通，不值得为此弹错误。
+    /// </remarks>
+    private IReadOnlyList<string> ListVmatFileNamesIn(string relativeDirectory)
+    {
+        var dir = string.IsNullOrEmpty(relativeDirectory)
+            ? AssetsRoot
+            : Path.Combine(AssetsRoot, relativeDirectory);
+        try
+        {
+            if (!Directory.Exists(dir)) return Array.Empty<string>();
+
+            return Directory.EnumerateFiles(dir, "*.vmat", SearchOption.TopDirectoryOnly)
+                .Select(Path.GetFileName)
+                .Where(name => !string.IsNullOrEmpty(name))
+                .Select(name => name!)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+        catch (IOException) { return Array.Empty<string>(); }
+        catch (UnauthorizedAccessException) { return Array.Empty<string>(); }
+    }
+
+    /// <summary>
+    /// 收集逐文件的<b>手动槽位覆盖</b>：计划里每一行当前的槽位就是权威值。
+    /// </summary>
+    /// <remarks>
+    /// <b>为什么全量给而不是只给「手动改过的」。</b>行上的槽位本来就 = 自动命中值 ∪ 手动改动，
+    /// 全量给让 Assign 无需区分来源，预览 / 生成与界面上看到的一致；未改过的行覆盖值
+    /// 与自动判定相同，是恒等操作。未勾选或未命中的行根本不在计划里，自然不参与。
+    /// 键的比较器与 <see cref="TextureAssigner"/> 的去重语义一致（Windows 大小写不敏感）。
+    /// </remarks>
+    private Dictionary<string, TextureRole> BuildRoleOverrides()
+    {
+        var overrides = new Dictionary<string, TextureRole>(
+            OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+        foreach (var row in ScanRows)
+        {
+            if (!row.Include || !row.IsMatched) continue;
+            overrides[row.FilePath] = row.Role;
+        }
+        return overrides;
+    }
 
 /// <summary>拼出本次扫描实际使用的规则表 = 规则表 + 推断出且勾选的新增后缀。</summary>
     /// <remarks>
@@ -568,7 +660,8 @@ public sealed partial class MainViewModel
 
         SelectedPreview = ControlErrorRecorder.Guard(
             "预览材质文本", this,
-            () => VmatBuildService.Preview(shader, files, BuildEffectiveRules(), AssetsRoot, ProjectRoot),
+            () => VmatBuildService.Preview(shader, files, BuildEffectiveRules(), AssetsRoot, ProjectRoot,
+                BuildRoleOverrides()),
             fallback: "（预览失败，详见错误日志）");
     }
 
@@ -609,9 +702,11 @@ public sealed partial class MainViewModel
                 ProgressMessage = p.Message;
             });
 
+            var overrides = BuildRoleOverrides();
             var result = await Task.Run(
                 () => VmatBuildService.BuildByGroup(shader, plan, BuildEffectiveRules(),
-                    AssetsRoot, ProjectRoot, progress, _buildCts.Token, overwriteExisting: false),
+                    AssetsRoot, ProjectRoot, progress, _buildCts.Token, overwriteExisting: false,
+                    roleOverrides: overrides),
                 _buildCts.Token).ConfigureAwait(true);
 
             BuildSummary = Describe(result);
@@ -671,10 +766,16 @@ public sealed partial class MainViewModel
     private static string Describe(VmatBuildResult result)
     {
         var sb = new StringBuilder();
-        sb.Append($"生成 {result.WrittenFiles.Count} 个 .vmat，共 {result.TotalFiles} 张贴图。");
+        sb.Append($"生成 {result.WrittenFiles.Count} 个 .vmat，共 {result.TotalFiles} 张贴图，"
+            + $"复制到输出目录 {result.CopiedImageFiles.Count} 张。");
         if (result.Conflicts.Count > 0) sb.Append($"　同槽位冲突 {result.Conflicts.Count} 处。");
         if (result.SkippedExisting.Count > 0)
             sb.Append($"　同名文件已存在、跳过 {result.SkippedExisting.Count} 个（未覆盖）。");
+        if (result.SkippedImageCopies.Count > 0)
+            sb.Append($"　贴图已存在、未覆盖 {result.SkippedImageCopies.Count} 张。");
+        if (result.MissingBaseColorGroups.Count > 0)
+            sb.Append($"　没有 basecolor 而整体跳过 {result.MissingBaseColorGroups.Count} 个材质："
+                + $"{string.Join("、", result.MissingBaseColorGroups.Take(5))}");
         if (result.UnassignedFiles.Count > 0)
             sb.Append($"　未写入 {result.UnassignedFiles.Count} 个。");
         return sb.ToString();

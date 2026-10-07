@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Media.Imaging;
@@ -192,6 +192,12 @@ public sealed partial class ScanRowViewModel : ObservableObject
     [ObservableProperty]
     private bool _include;
 
+    /// <summary>勾选状态变化时触发：取消勾选会让该贴图退出材质、也可能让材质整个消失。</summary>
+    public event Action? IncludeChanged;
+
+    /// <summary>由生成器挂接 <see cref="Include"/> 的属性变更通知。</summary>
+    partial void OnIncludeChanged(bool value) => IncludeChanged?.Invoke();
+
     /// <summary>槽位被手动改过时触发，由 <see cref="MainViewModel"/> 刷新材质预览。</summary>
     /// <remarks>
     /// 槽位决定 .vmat 里写哪个参数键，改动会直接反映到生成的材质上，
@@ -228,6 +234,29 @@ public sealed partial class ScanRowViewModel : ObservableObject
     /// <summary>实际生效的分组名：用户指定优先，否则用扫描给出的基名。</summary>
     public string GroupName => string.IsNullOrWhiteSpace(GroupNameOverride) ? _groupName : GroupNameOverride.Trim();
 
+    /// <summary>
+    /// 表格里显示的<b>输出 .vmat 文件名</b>：生效分组名加 <c>.vmat</c> 扩展名。
+    /// </summary>
+    /// <remarks>
+    /// <para>这一列直接写用户真正会得到的文件名（<c>wall.vmat</c> 而不是 <c>wall</c>），
+    /// 免得自己在脑子里补扩展名。写回时把扩展名剥掉再存进
+    /// <see cref="GroupNameOverride"/>，所以分组键永远不含扩展名，
+    /// 与生成器、预览聚合用的 <see cref="GroupName"/> 保持同一口径。</para>
+    ///
+    /// <para>清空文本 = 清掉手动指定，回到按基名的自动归类。</para>
+    /// </remarks>
+    public string VmatFileName
+    {
+        get => GroupName + ".vmat";
+        set
+        {
+            var name = (value ?? string.Empty).Trim();
+            if (name.EndsWith(".vmat", StringComparison.OrdinalIgnoreCase))
+                name = name[..^".vmat".Length].Trim();
+            GroupNameOverride = name;
+        }
+    }
+
     /// <summary>分组归属发生变化时触发。</summary>
     public event Action? GroupChanged;
 
@@ -237,13 +266,44 @@ public sealed partial class ScanRowViewModel : ObservableObject
         _groupName = baseName;
         GroupNameOverride = string.Empty;
         OnPropertyChanged(nameof(GroupName));
+        OnPropertyChanged(nameof(VmatFileName));
     }
 
     /// <summary>由生成器挂接 <see cref="GroupNameOverride"/> 的属性变更通知。</summary>
     partial void OnGroupNameOverrideChanged(string? value)
     {
         OnPropertyChanged(nameof(GroupName));
+        OnPropertyChanged(nameof(VmatFileName));
         GroupChanged?.Invoke();
+    }
+
+    // ─── 「输出的 .vmat 文件名」列的下拉候选 ─────────────────────────────
+
+    /// <summary>
+    /// 材质名下拉的候选项：<b>本行贴图所在文件夹下实际存在</b>的全部 <c>.vmat</c> 文件名。
+    /// </summary>
+    /// <remarks>
+    /// <para><b>为什么按文件夹列现有文件。</b>现有材质就是贴图旁边的那些 <c>.vmat</c>，
+    /// 把散图并进同目录的现成材质是最常见的操作；下拉列当前文件夹的名字最贴合意图。
+    /// 组合框可编辑，输入一个新名字同样有效——那是给新材质添第一张贴图的路径。
+    /// 注意 basecolor 仍是材质成立的必要条件：选了/写了没有颜色贴图的材质名，
+    /// 生成端会整体跳过。</para>
+    ///
+    /// <para>由 <see cref="UpdateMaterialNames"/> 整体替换；行本身不知道全局列表，
+    /// 与 <see cref="RoleOptions"/> 同一套「列表的一方推给行」的模式。</para>
+    /// </remarks>
+    public IReadOnlyList<string> MaterialNameOptions { get; private set; } = Array.Empty<string>();
+
+    /// <summary>替换材质名候选项。扫描后由 <see cref="MainViewModel"/> 按行所在文件夹调用。</summary>
+    /// <param name="names">候选材质文件名（带 <c>.vmat</c> 扩展名，与列内文本同形态）。</param>
+    public void UpdateMaterialNames(IReadOnlyList<string> names)
+    {
+        names ??= Array.Empty<string>();
+        // 同一目录的行共享同一份列表实例；没换实例就不抛通知，避免白白重建下拉容器。
+        if (ReferenceEquals(MaterialNameOptions, names)) return;
+
+        MaterialNameOptions = names;
+        OnPropertyChanged(nameof(MaterialNameOptions));
     }
 // ─── 缩略图 ────────────────────────────────────────────────────────────
 

@@ -172,12 +172,21 @@ public static class TextureAssigner
     /// <param name="textureFilePaths">待分配的贴图文件路径集合；允许含非贴图条目（会被忽略并计入未命中）。</param>
     /// <param name="rules">后缀规则表；为 <c>null</c> 时所有文件都进入未命中列表。</param>
     /// <param name="textureRoot">贴图根目录；为空 / 不存在时按 §6.6 原样写回绝对路径。</param>
+    /// <param name="roleOverrides">
+    /// 可选的<b>手动槽位覆盖</b>（完整路径 → 槽位；比较器由调用方负责，Windows 上
+    /// 用大小写不敏感）。界面上逐行手改的槽位靠它进入分配结果：命中过规则的按覆盖值
+    /// 改派，从未命中的按覆盖值<b>加入</b>（用户点名一个槽位，胜过「后缀不认就丢弃」）。
+    /// 覆盖值是 <see cref="TextureRole.Unknown"/> 的文件视为<b>显式排除</b>，落进未命中列表。
+    /// 同槽位竞争时覆盖条目的后缀长度记 0，真后缀命中者胜出——
+    /// 手动指定是「补位」，不是「抢位」。
+    /// </param>
     /// <returns>分配方案、冲突说明与未命中文件列表。</returns>
     public static TextureAssignResult Assign(
         ShaderTemplate shader,
         IEnumerable<string> textureFilePaths,
         IReadOnlyList<TextureSuffixRule> rules,
-        string? textureRoot)
+        string? textureRoot,
+        IReadOnlyDictionary<string, TextureRole>? roleOverrides = null)
     {
         var input = NormalizeInput(textureFilePaths);
         var matcher = new TextureSuffixMatcher(rules ?? Array.Empty<TextureSuffixRule>());
@@ -188,6 +197,14 @@ public static class TextureAssigner
 
         foreach (var path in input)
         {
+            var forced = LookupOverride(roleOverrides, path);
+            if (forced is TextureRole.Unknown)
+            {
+                // 调用方明确说这张不参与（行被取消勾选 / 槽位未知）：后缀再像也不写。
+                unassigned.Add(path);
+                continue;
+            }
+
             if (!TexturePathRules.IsTextureFile(path))
             {
                 unassigned.Add(path);
@@ -195,7 +212,19 @@ public static class TextureAssigner
             }
 
             var match = matcher.Match(path);
-            if (match is null || match.Role == TextureRole.Unknown)
+            if (forced is TextureRole forcedRole)
+            {
+                match = match switch
+                {
+                    null => new TextureSuffixMatch(path, Path.GetFileNameWithoutExtension(path),
+                        string.Empty, forcedRole, string.Empty, 0, false),
+                    _ when match.Role == forcedRole => match,
+                    _ => new TextureSuffixMatch(match.FilePath, match.FileNameWithoutExtension,
+                        match.NormalizedName, forcedRole,
+                        match.MatchedSuffix, match.MatchedSuffixLength, match.IsWholeNameMatch),
+                };
+            }
+            else if (match is null || match.Role == TextureRole.Unknown)
             {
                 unassigned.Add(path);
                 continue;
@@ -286,6 +315,19 @@ public static class TextureAssigner
         var byName = string.CompareOrdinal(a.FileNameWithoutExtension, b.FileNameWithoutExtension);
         if (byName != 0) return byName < 0;
         return string.CompareOrdinal(a.FilePath, b.FilePath) < 0;
+    }
+
+    /// <summary>
+    /// 查手动槽位覆盖：键为原始文件路径，比较器由调用方负责（Windows 上用大小写
+    /// 不敏感，与 <see cref="NormalizeInput"/> 的去重语义一致）。原样返回覆盖值，
+    /// 包括 <see cref="TextureRole.Unknown"/>——它表示调用方的<b>显式排除</b>。
+    /// </summary>
+    private static TextureRole? LookupOverride(
+        IReadOnlyDictionary<string, TextureRole>? overrides, string path)
+    {
+        if (overrides is null || overrides.Count == 0) return null;
+        if (!overrides.TryGetValue(path, out var role)) return null;
+        return role;
     }
 
     /// <summary>去掉空白项并按完整路径去重（大小写按平台语义），保持输入顺序。</summary>
