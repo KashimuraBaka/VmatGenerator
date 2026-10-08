@@ -222,7 +222,7 @@ public sealed class DropImportService
         var textureRoot = category switch
         {
             DropCategory.TextureFiles => NullIfEmpty(TexturePathRules.CommonParentDirectory(textureFiles)),
-            DropCategory.TextureOnlyFolder => droppedDirectories.FirstOrDefault(),
+            DropCategory.TextureOnlyFolder => droppedDirectories.Count > 0 ? droppedDirectories[0] : null,
             DropCategory.Mixed => NullIfEmpty(TexturePathRules.CommonParentDirectory(textureFiles)),
             _ => null,
         };

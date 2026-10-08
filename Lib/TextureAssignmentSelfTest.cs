@@ -809,7 +809,7 @@ public static class TextureAssignmentSelfTest
             VmatGeneratorSettings.CreateDefault().Rules,
             sandbox.TextureRoot);
 
-        var conflict = result.Conflicts.FirstOrDefault();
+        var conflict = result.Conflicts.Count > 0 ? result.Conflicts[0] : null;
         return Combine(
             Eq(1, result.Assignments.Count, "S4 只写一项"),
             Eq("TextureNormal1", result.Assignments[0].ParameterKey, "S4 参数键"),
@@ -829,7 +829,7 @@ public static class TextureAssignmentSelfTest
             new[] { aFile, bFile },
             VmatGeneratorSettings.CreateDefault().Rules,
             sandbox.TextureRoot);
-        var conflict = result.Conflicts.FirstOrDefault();
+        var conflict = result.Conflicts.Count > 0 ? result.Conflicts[0] : null;
         return Combine(
             Eq("wall/a_normal.png", result.Assignments[0].VmatPath, "S5 Ordinal 决胜的胜者"),
             Eq(aFile, conflict!.KeptFilePath, "S5 胜者路径"),
@@ -878,7 +878,7 @@ public static class TextureAssignmentSelfTest
             VmatGeneratorSettings.CreateDefault().Rules,
             sandbox.TextureRoot);
 
-        var unresolved = result.UnresolvedRoles.FirstOrDefault();
+        var unresolved = result.UnresolvedRoles.Count > 0 ? result.UnresolvedRoles[0] : null;
         return Combine(
             Eq(0, result.Assignments.Count, "S7 必须零写入"),
             Eq(1, result.UnresolvedRoles.Count, "S7 未解析槽位数"),
