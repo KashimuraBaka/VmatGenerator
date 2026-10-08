@@ -74,7 +74,7 @@ public static class KvAdapter
     /// </remarks>
     public static string SerializeViaValve(VmatNode root)
     {
-        string documentName = string.IsNullOrEmpty(root.Key) ? Layer0Key : root.Key;
+        var documentName = string.IsNullOrEmpty(root.Key) ? Layer0Key : root.Key;
 
         KVObject payload;
         if (root.IsContainer)
@@ -121,7 +121,7 @@ public static class KvAdapter
         if (!string.Equals(a.Key, b.Key, StringComparison.Ordinal)) return false;
         if (!string.Equals(a.Value ?? string.Empty, b.Value ?? string.Empty, StringComparison.Ordinal)) return false;
         if (a.Children.Count != b.Children.Count) return false;
-        for (int i = 0; i < a.Children.Count; i++)
+        for (var i = 0; i < a.Children.Count; i++)
             if (!StructuralEquals(a.Children[i], b.Children[i])) return false;
         return true;
     }
@@ -188,7 +188,7 @@ public static class KvAdapter
                         // KV1 has no native arrays; numeric keys are used. Flatten into a
                         // single anonymous container so the structure round-trips.
                         var arr = new VmatNode(string.Empty);
-                        int i = 0;
+                        var i = 0;
                         foreach (var el in value)
                         {
                             var itemChild = new VmatNode(i.ToString());

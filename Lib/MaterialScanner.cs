@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 
 namespace Lib;
 
@@ -10,9 +10,9 @@ namespace Lib;
 public sealed class MaterialScanner
 {
     /// <inheritdoc/>
-    public IReadOnlyList<VmatDocument> Scan(string root)
+    public static IReadOnlyList<VmatDocument> Scan(string root)
     {
-        if (!Directory.Exists(root)) return Array.Empty<VmatDocument>();
+        if (!Directory.Exists(root)) return [];
         var results = new List<VmatDocument>();
         foreach (var path in Directory.EnumerateFiles(root, "*.vmat", SearchOption.AllDirectories))
         {
@@ -35,8 +35,7 @@ public sealed class MaterialScanner
     }
 
     /// <inheritdoc/>
-    public IEnumerable<(string Shader, IReadOnlyList<VmatDocument> Materials)> GroupByShader(IEnumerable<VmatDocument> docs) =>
-        docs
+    public static IEnumerable<(string Shader, IReadOnlyList<VmatDocument> Materials)> GroupByShader(IEnumerable<VmatDocument> docs) => docs
             .GroupBy(d => string.IsNullOrEmpty(d.ShaderName) ? "(no shader)" : d.ShaderName)
             .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
             .Select(g => (g.Key, (IReadOnlyList<VmatDocument>)[.. g.OrderBy(d => d.DisplayName, StringComparer.OrdinalIgnoreCase)]));
@@ -55,7 +54,7 @@ public sealed class VmatGenerator
     /// <c>SystemAttributes</c> sub-blocks when the template defines them, so the
     /// emitted text is a complete Source 2 VMAT.
     /// </summary>
-    public VmatNode BuildDocument(
+    public static VmatNode BuildDocument(
         ShaderTemplate shader,
         IDictionary<string, string> values,
         IEnumerable<string>? enabledFeatureFlags = null,
@@ -65,7 +64,7 @@ public sealed class VmatGenerator
         var root = new VmatNode("Layer0");
         root.SetString("shader", shader.ShaderName);
 
-        var enabledFlags = new HashSet<string>(enabledFeatureFlags ?? Array.Empty<string>(), StringComparer.Ordinal);
+        var enabledFlags = new HashSet<string>(enabledFeatureFlags ?? [], StringComparer.Ordinal);
 
         // Feature flags come first so they show up near the top of the file (this is the
         // convention the workspace samples use). Flags the user did not explicitly enable
@@ -107,7 +106,7 @@ public sealed class VmatGenerator
         {
             if (p.Kind != ShaderParamKind.Texture) continue;
             if (!values.TryGetValue(p.Key, out var tex) || string.IsNullOrEmpty(tex)) continue;
-            foreach (var key in MapToCompiledKey(shader.ShaderName, p.Key))
+            foreach (var key in MapToCompiledKey(p.Key))
             {
                 compiledKeys.Add(key);
                 compiledValueMap[key] = tex + ".vtex";
@@ -167,7 +166,7 @@ public sealed class VmatGenerator
     }
 
     /// <inheritdoc/>
-    public string Render(
+    public static string Render(
         ShaderTemplate shader,
         IDictionary<string, string> values,
         IEnumerable<string>? enabledFeatureFlags = null,
@@ -183,26 +182,20 @@ public sealed class VmatGenerator
         return doc.Serialize();
     }
 
-    private static string NormalizeValue(ShaderParamTemplate p, string raw)
+    private static string NormalizeValue(ShaderParamTemplate p, string raw) => p.Kind switch
     {
-        return p.Kind switch
-        {
-            ShaderParamKind.Float => float.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var f)
-                ? f.ToString("0.######", CultureInfo.InvariantCulture) : raw,
-            ShaderParamKind.Int => int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var i)
-                ? i.ToString(CultureInfo.InvariantCulture) : raw,
-            ShaderParamKind.Bool => (raw == "1" || raw.Equals("true", StringComparison.OrdinalIgnoreCase)) ? "1" : "0",
-            ShaderParamKind.Vector => NormalizeVector(raw),
-            _ => raw,
-        };
-    }
+        ShaderParamKind.Float => float.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var f)
+            ? f.ToString("0.######", CultureInfo.InvariantCulture) : raw,
+        ShaderParamKind.Int => int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var i)
+            ? i.ToString(CultureInfo.InvariantCulture) : raw,
+        ShaderParamKind.Bool => (raw == "1" || raw.Equals("true", StringComparison.OrdinalIgnoreCase)) ? "1" : "0",
+        ShaderParamKind.Vector => NormalizeVector(raw),
+        _ => raw,
+    };
 
-    private static string NormalizeVector(string raw)
-    {
-        return Vector4.TryParse(raw, out var v) ? v.ToString() : raw;
-    }
+    private static string NormalizeVector(string raw) => Vector4.TryParse(raw, out var v) ? v.ToString() : raw;
 
-    private static IEnumerable<string> MapToCompiledKey(string shader, string paramKey)
+    private static IEnumerable<string> MapToCompiledKey(string paramKey)
     {
         // For Source 2 a Texture* parameter named TextureFoo normally maps to g_tFoo
         // in the compiled block. Numeric or vector variants keep the same name.

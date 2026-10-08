@@ -42,8 +42,7 @@ public static class TextureRoleTokens
     /// </summary>
     /// <param name="role">待查询的角色。</param>
     /// <returns>只读 Token 列表（长度 ≥ 1 者首项必为主 Token）。</returns>
-    public static IReadOnlyList<string> TokensOf(TextureRole role) =>
-        Map.TryGetValue(role, out var info) ? info.Tokens : Array.Empty<string>();
+    public static IReadOnlyList<string> TokensOf(TextureRole role) => Map.TryGetValue(role, out var info) ? info.Tokens : [];
 
     /// <summary>
     /// 取某个角色的主 Token（P1–P3 档唯一认可的 Token）。
@@ -51,16 +50,15 @@ public static class TextureRoleTokens
     /// </summary>
     /// <param name="role">待查询的角色。</param>
     /// <returns>主 Token，或 <c>""</c>。</returns>
-    public static string PrimaryTokenOf(TextureRole role) =>
-        Map.TryGetValue(role, out var info) ? info.Tokens[0] : string.Empty;
+    public static string PrimaryTokenOf(TextureRole role) => Map.TryGetValue(role, out var info) ? info.Tokens[0] : string.Empty;
 
     /// <summary>
     /// 取某个角色的中文显示名，用于 GUI 下拉框与诊断文本。
     /// </summary>
     /// <param name="role">待查询的角色。</param>
     /// <returns>中文名；未知值返回枚举名本身。</returns>
-    public static string Describe(TextureRole role) =>
-        Map.TryGetValue(role, out var info) ? info.Display : role.ToString();
+    public static string Describe(TextureRole role) => Map.TryGetValue(role, out var info) ? info.Display : role.ToString();
+
     /// <summary>
     /// 取某个角色的「中文名（枚举名）」双语文本，供需要两者并存的界面使用。
     /// </summary>
@@ -98,56 +96,50 @@ public static class TextureRoleTokens
         return true;
     }
 
-    private static IReadOnlyList<TextureRole> BuildAllRoles() =>
-        Enum.GetValues<TextureRole>();
+    private static IReadOnlyList<TextureRole> BuildAllRoles() => Enum.GetValues<TextureRole>();
 
     private static IReadOnlyDictionary<TextureRole, RoleInfo> BuildMap() => new Dictionary<TextureRole, RoleInfo>
     {
-        [TextureRole.Unknown] = new(Array.Empty<string>(), "未识别"),
-        [TextureRole.Color] = new(new[] { "Color", "Albedo", "Diffuse", "Base" }, "颜色 / 反照率"),
-        [TextureRole.Normal] = new(new[] { "Normal", "Normals", "Norm" }, "法线"),
-        [TextureRole.Roughness] = new(new[] { "Roughness", "Rough" }, "粗糙度"),
-        [TextureRole.Metalness] = new(new[] { "Metalness", "Metal", "Metallic" }, "金属度"),
-        [TextureRole.AmbientOcclusion] = new(new[] { "AmbientOcclusion", "AO", "Occlusion" }, "环境光遮蔽"),
-        [TextureRole.Height] = new(new[] { "Height", "Displacement" }, "高度"),
-        [TextureRole.Translucency] = new(new[] { "Translucency", "Trans", "Transmission" }, "半透明"),
-        [TextureRole.Detail] = new(new[] { "Detail", "DetailAlbedo" }, "细节"),
-        [TextureRole.Mask] = new(new[] { "Mask" }, "遮罩"),
-        [TextureRole.Emissive] = new(new[] { "Emissive", "SelfIllum", "SelfIllumination", "Emission" }, "自发光"),
-        [TextureRole.CubeMap] = new(new[] { "CubeMap", "Cube", "Sky", "Env" }, "Cube 贴图"),
-        [TextureRole.Lightmap] = new(new[] { "Lightmap", "LightMap", "LightMapTexture" }, "光照贴图"),
-        [TextureRole.FoamMask] = new(new[] { "Foam", "FoamMask" }, "泡沫遮罩"),
-        [TextureRole.FoamNormal] = new(new[] { "FoamNormal" }, "泡沫法线"),
-        [TextureRole.WavesMask] = new(new[] { "Waves", "WavesMask" }, "波浪遮罩"),
-        [TextureRole.WavesNormal] = new(new[] { "WavesNormal" }, "波浪法线"),
-        [TextureRole.WavesHeight] = new(new[] { "WavesHeight" }, "波浪高度"),
-        [TextureRole.DebrisColor] = new(new[] { "Debris", "DebrisColor" }, "漂浮物颜色"),
-        [TextureRole.DebrisNormal] = new(new[] { "DebrisNormal" }, "漂浮物法线"),
-        [TextureRole.DebrisHeight] = new(new[] { "DebrisHeight" }, "漂浮物高度"),
-        [TextureRole.TintMask] = new(new[] { "TintMask" }, "染色遮罩"),
-        [TextureRole.DetailMask] = new(new[] { "DetailMask" }, "细节遮罩"),
-        [TextureRole.SelfIllumMask] = new(new[] { "SelfIllumMask" }, "自发光遮罩"),
-        [TextureRole.RimMask] = new(new[] { "RimMask" }, "边缘光遮罩"),
-        [TextureRole.LowEndCubeMap] = new(new[] { "LowEndCubeMap" }, "低端 Cube Map"),
-        [TextureRole.HairMask] = new(new[] { "HairMask" }, "毛发遮罩"),
-        [TextureRole.SssMask] = new(new[] { "SssMask" }, "次表面散射遮罩"),
-        [TextureRole.RetroReflectiveMask] = new(new[] { "RetroReflectiveMask" }, "逆反射遮罩"),
-        [TextureRole.NormalDetail] = new(new[] { "NormalDetail" }, "细节法线"),
-        [TextureRole.DecalTranslucency] = new(new[] { "DecalTranslucency" }, "贴花半透明"),
+        [TextureRole.Unknown] = new([], "未识别"),
+        [TextureRole.Color] = new(["Color", "Albedo", "Diffuse", "Base"], "颜色 / 反照率"),
+        [TextureRole.Normal] = new(["Normal", "Normals", "Norm"], "法线"),
+        [TextureRole.Roughness] = new(["Roughness", "Rough"], "粗糙度"),
+        [TextureRole.Metalness] = new(["Metalness", "Metal", "Metallic"], "金属度"),
+        [TextureRole.AmbientOcclusion] = new(["AmbientOcclusion", "AO", "Occlusion"], "环境光遮蔽"),
+        [TextureRole.Height] = new(["Height", "Displacement"], "高度"),
+        [TextureRole.Translucency] = new(["Translucency", "Trans", "Transmission"], "半透明"),
+        [TextureRole.Detail] = new(["Detail", "DetailAlbedo"], "细节"),
+        [TextureRole.Mask] = new(["Mask"], "遮罩"),
+        [TextureRole.Emissive] = new(["Emissive", "SelfIllum", "SelfIllumination", "Emission"], "自发光"),
+        [TextureRole.CubeMap] = new(["CubeMap", "Cube", "Sky", "Env"], "Cube 贴图"),
+        [TextureRole.Lightmap] = new(["Lightmap", "LightMap", "LightMapTexture"], "光照贴图"),
+        [TextureRole.FoamMask] = new(["Foam", "FoamMask"], "泡沫遮罩"),
+        [TextureRole.FoamNormal] = new(["FoamNormal"], "泡沫法线"),
+        [TextureRole.WavesMask] = new(["Waves", "WavesMask"], "波浪遮罩"),
+        [TextureRole.WavesNormal] = new(["WavesNormal"], "波浪法线"),
+        [TextureRole.WavesHeight] = new(["WavesHeight"], "波浪高度"),
+        [TextureRole.DebrisColor] = new(["Debris", "DebrisColor"], "漂浮物颜色"),
+        [TextureRole.DebrisNormal] = new(["DebrisNormal"], "漂浮物法线"),
+        [TextureRole.DebrisHeight] = new(["DebrisHeight"], "漂浮物高度"),
+        [TextureRole.TintMask] = new(["TintMask"], "染色遮罩"),
+        [TextureRole.DetailMask] = new(["DetailMask"], "细节遮罩"),
+        [TextureRole.SelfIllumMask] = new(["SelfIllumMask"], "自发光遮罩"),
+        [TextureRole.RimMask] = new(["RimMask"], "边缘光遮罩"),
+        [TextureRole.LowEndCubeMap] = new(["LowEndCubeMap"], "低端 Cube Map"),
+        [TextureRole.HairMask] = new(["HairMask"], "毛发遮罩"),
+        [TextureRole.SssMask] = new(["SssMask"], "次表面散射遮罩"),
+        [TextureRole.RetroReflectiveMask] = new(["RetroReflectiveMask"], "逆反射遮罩"),
+        [TextureRole.NormalDetail] = new(["NormalDetail"], "细节法线"),
+        [TextureRole.DecalTranslucency] = new(["DecalTranslucency"], "贴花半透明"),
     };
 
-    private sealed class RoleInfo
+    private sealed class RoleInfo(string[] tokens, string display)
     {
-        public RoleInfo(string[] tokens, string display)
-        {
-            Tokens = tokens;
-            Display = display;
-        }
 
         /// <summary>索引 0 为主 Token，其后为别名 Token。</summary>
-        public IReadOnlyList<string> Tokens { get; }
+        public IReadOnlyList<string> Tokens { get; } = tokens;
 
         /// <summary>中文显示名。</summary>
-        public string Display { get; }
+        public string Display { get; } = display;
     }
 }

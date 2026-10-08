@@ -7,6 +7,12 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <LangVersion>latest</LangVersion>
+    <!-- IDE 风格提示（.editorconfig 里提升为 warning 的那些）参与构建报告，保证「0 提示」口径与 IDE 一致 -->
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <!-- IDE0005（删除不必要 using）的构建侧分析依赖此项（roslyn#41640）；
+         GUI 是应用程序不发布 XML 文档，CS1591 缺注释提示与此无关，屏蔽之 -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
     <RootNamespace>GUI</RootNamespace>
     <AssemblyName>GUI</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>

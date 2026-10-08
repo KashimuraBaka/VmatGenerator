@@ -27,26 +27,19 @@ public sealed class VmatBuildProgress(int index, int total, string message)
 /// 基名都是 <c>wall</c>，同目录下的它们合成一个 <c>wall.vmat</c>；
 /// 不同目录的同名基名<b>不会</b>合并——同名覆盖会静默吃掉另一处材质。
 /// </remarks>
-public sealed class VmatBuildGroup
+/// <remarks>构造分组。</remarks>
+/// <param name="directory">贴图所在目录（不带尾部分隔符）。</param>
+/// <param name="baseName">去掉命中后缀后的基名。</param>
+/// <param name="assignments">归入本组的分配记录。</param>
+public sealed class VmatBuildGroup(string directory, string baseName, IReadOnlyList<TextureAssignment> assignments)
 {
-    private readonly List<TextureAssignment> _assignments;
-
-    /// <summary>构造分组。</summary>
-    /// <param name="directory">贴图所在目录（不带尾部分隔符）。</param>
-    /// <param name="baseName">去掉命中后缀后的基名。</param>
-    /// <param name="assignments">归入本组的分配记录。</param>
-    public VmatBuildGroup(string directory, string baseName, IReadOnlyList<TextureAssignment> assignments)
-    {
-        Directory = directory;
-        BaseName = baseName;
-        _assignments = [.. assignments];
-    }
+    private readonly List<TextureAssignment> _assignments = [.. assignments];
 
     /// <summary>贴图所在目录；为空表示与进程工作目录同层。</summary>
-    public string Directory { get; }
+    public string Directory { get; } = directory;
 
     /// <summary>去掉命中后缀后的基名。</summary>
-    public string BaseName { get; }
+    public string BaseName { get; } = baseName;
 
     /// <summary>归入本组的分配记录。</summary>
     public IReadOnlyList<TextureAssignment> Assignments => _assignments;
@@ -56,63 +49,50 @@ public sealed class VmatBuildGroup
 }
 
 /// <summary>一次生成的结果汇总。</summary>
-public sealed class VmatBuildResult
+/// <remarks>构造结果。</remarks>
+/// <param name="writtenFiles">已写出的 <c>.vmat</c> 路径。</param>
+/// <param name="groups">全部分组（含未来可能被跳过的）。</param>
+/// <param name="unassignedFiles">未命中任何启用规则、未写入的文件。</param>
+/// <param name="conflicts">同槽位冲突记录。</param>
+/// <param name="unresolvedRoles">命中规则但无法确定参数键的角色。</param>
+/// <param name="totalFiles">本次输入的文件总数。</param>
+/// <param name="skippedExisting">因目标已存在而<b>未写入</b>的路径。</param>
+/// <param name="copiedImageFiles">随材质复制出去的贴图目标路径。</param>
+/// <param name="skippedImageCopies">因已存在且未允许覆盖而未复制的贴图路径。</param>
+/// <param name="missingBaseColorGroups">因组内没有颜色贴图而整体跳过的材质名。</param>
+public sealed class VmatBuildResult(
+    IReadOnlyList<string> writtenFiles,
+    IReadOnlyList<VmatBuildGroup> groups,
+    IReadOnlyList<string> unassignedFiles,
+    IReadOnlyList<TextureConflict> conflicts,
+    IReadOnlyList<TextureRoleResolution> unresolvedRoles,
+    int totalFiles,
+    IReadOnlyList<string> skippedExisting,
+    IReadOnlyList<string>? copiedImageFiles = null,
+    IReadOnlyList<string>? skippedImageCopies = null,
+    IReadOnlyList<string>? missingBaseColorGroups = null)
 {
-    /// <summary>构造结果。</summary>
-    /// <param name="writtenFiles">已写出的 <c>.vmat</c> 路径。</param>
-    /// <param name="groups">全部分组（含未来可能被跳过的）。</param>
-    /// <param name="unassignedFiles">未命中任何启用规则、未写入的文件。</param>
-    /// <param name="conflicts">同槽位冲突记录。</param>
-    /// <param name="unresolvedRoles">命中规则但无法确定参数键的角色。</param>
-    /// <param name="totalFiles">本次输入的文件总数。</param>
-    /// <param name="skippedExisting">因目标已存在而<b>未写入</b>的路径。</param>
-    /// <param name="copiedImageFiles">随材质复制出去的贴图目标路径。</param>
-    /// <param name="skippedImageCopies">因已存在且未允许覆盖而未复制的贴图路径。</param>
-    /// <param name="missingBaseColorGroups">因组内没有颜色贴图而整体跳过的材质名。</param>
-    public VmatBuildResult(
-        IReadOnlyList<string> writtenFiles,
-        IReadOnlyList<VmatBuildGroup> groups,
-        IReadOnlyList<string> unassignedFiles,
-        IReadOnlyList<TextureConflict> conflicts,
-        IReadOnlyList<TextureRoleResolution> unresolvedRoles,
-        int totalFiles,
-        IReadOnlyList<string> skippedExisting,
-        IReadOnlyList<string>? copiedImageFiles = null,
-        IReadOnlyList<string>? skippedImageCopies = null,
-        IReadOnlyList<string>? missingBaseColorGroups = null)
-    {
-        WrittenFiles = writtenFiles;
-        Groups = groups;
-        UnassignedFiles = unassignedFiles;
-        Conflicts = conflicts;
-        UnresolvedRoles = unresolvedRoles;
-        TotalFiles = totalFiles;
-        SkippedExisting = skippedExisting;
-        CopiedImageFiles = copiedImageFiles ?? Array.Empty<string>();
-        SkippedImageCopies = skippedImageCopies ?? Array.Empty<string>();
-        MissingBaseColorGroups = missingBaseColorGroups ?? Array.Empty<string>();
-    }
 
     /// <summary>已写出的 <c>.vmat</c> 路径（与 <see cref="VmatBuildGroup.TargetPath"/> 一致）。</summary>
-    public IReadOnlyList<string> WrittenFiles { get; }
+    public IReadOnlyList<string> WrittenFiles { get; } = writtenFiles;
 
     /// <summary>全部分组。</summary>
-    public IReadOnlyList<VmatBuildGroup> Groups { get; }
+    public IReadOnlyList<VmatBuildGroup> Groups { get; } = groups;
 
     /// <summary>
     /// 未命中任何启用规则的文件——<b>不会被写进任何 .vmat</b>。
     /// 用户自定义后缀若无对应规则就落在这里，必须显式呈现，不能静默丢弃。
     /// </summary>
-    public IReadOnlyList<string> UnassignedFiles { get; }
+    public IReadOnlyList<string> UnassignedFiles { get; } = unassignedFiles;
 
     /// <summary>同槽位冲突记录（同一参数键被多张贴图占用）。</summary>
-    public IReadOnlyList<TextureConflict> Conflicts { get; }
+    public IReadOnlyList<TextureConflict> Conflicts { get; } = conflicts;
 
     /// <summary>命中规则但无法确定参数键的角色（诊断见 <see cref="TextureRoleResolution.DiagnosticText"/>）。</summary>
-    public IReadOnlyList<TextureRoleResolution> UnresolvedRoles { get; }
+    public IReadOnlyList<TextureRoleResolution> UnresolvedRoles { get; } = unresolvedRoles;
 
     /// <summary>本次输入的文件总数。</summary>
-    public int TotalFiles { get; }
+    public int TotalFiles { get; } = totalFiles;
 
     /// <summary>
     /// 因目标 <c>.vmat</c> 已存在而<b>未写入</b>的路径（<c>overwriteExisting = false</c> 时）。
@@ -121,19 +101,19 @@ public sealed class VmatBuildResult
     /// 生成是「拖入即写盘」的场景，默默覆盖用户已有的材质是不可接受的默认行为。
     /// 宁可跳过并在界面上明确告知，也不要替用户做这个决定。
     /// </remarks>
-    public IReadOnlyList<string> SkippedExisting { get; }
+    public IReadOnlyList<string> SkippedExisting { get; } = skippedExisting;
 
     /// <summary>随材质一并复制到输出目录的<b>贴图文件</b>目标路径（只有 <see cref="VmatBuildService.BuildByGroup"/> 会填）。</summary>
-    public IReadOnlyList<string> CopiedImageFiles { get; }
+    public IReadOnlyList<string> CopiedImageFiles { get; } = copiedImageFiles ?? [];
 
     /// <summary>因目的地已存在且未允许覆盖而<b>未复制</b>的贴图路径。</summary>
-    public IReadOnlyList<string> SkippedImageCopies { get; }
+    public IReadOnlyList<string> SkippedImageCopies { get; } = skippedImageCopies ?? [];
 
     /// <summary>
     /// 因组内<b>没有 basecolor（颜色）贴图</b>而整体跳过的材质名。
     /// 颜色贴图是材质成立的底线，宁可不写也不产出没有底色的空壳材质。
     /// </summary>
-    public IReadOnlyList<string> MissingBaseColorGroups { get; }
+    public IReadOnlyList<string> MissingBaseColorGroups { get; } = missingBaseColorGroups ?? [];
 }
 
 /// <summary>
@@ -156,21 +136,21 @@ public static class VmatBuildService
     /// <param name="rules">后缀规则表。</param>
     /// <param name="textureRoot">贴图根目录；为空时按 <see cref="TexturePathRules"/> 原样写绝对路径。</param>
     /// <param name="progress">进度回调；可传 <c>null</c>。</param>
-    /// <param name="cancellationToken">取消令牌；每组开始前检查。</param>
     /// <param name="overwriteExisting">
     /// 目标 <c>.vmat</c> 已存在时是否覆盖。<b>默认 <c>false</c></b>——跳过并记入
     /// <see cref="VmatBuildResult.SkippedExisting"/>，绝不默默盖掉用户已有材质。
     /// </param>
+    /// <param name="cancellationToken">取消令牌；每组开始前检查。约定摆在参数表最后。</param>
     public static VmatBuildResult Build(
         ShaderTemplate shader,
         IEnumerable<string> textureFilePaths,
         IReadOnlyList<TextureSuffixRule> rules,
         string? textureRoot,
         IProgress<VmatBuildProgress>? progress = null,
-        CancellationToken cancellationToken = default,
-        bool overwriteExisting = false)
+        bool overwriteExisting = false,
+        CancellationToken cancellationToken = default)
     {
-        var ruleList = rules ?? Array.Empty<TextureSuffixRule>();
+        var ruleList = rules ?? [];
         var matcher = new TextureSuffixMatcher(ruleList);
 
         // 分组必须在冲突消解「之前」完成。
@@ -189,7 +169,6 @@ public static class VmatBuildService
         var conflicts = new List<TextureConflict>();
         var unresolved = new List<TextureRoleResolution>();
         var groups = new List<VmatBuildGroup>(buckets.Count);
-        var generator = new VmatGenerator();
 
         for (var i = 0; i < buckets.Count; i++)
         {
@@ -221,7 +200,7 @@ public static class VmatBuildService
                 values[a.ParameterKey] = a.VmatPath;
             }
 
-            var text = generator.Render(
+            var text = VmatGenerator.Render(
                 shader,
                 values,
                 systemAttributeOverrides: shader.SystemAttributeDefaults.ToDictionary(kv => kv.Key, kv => kv.Value));
@@ -252,24 +231,22 @@ public static class VmatBuildService
     /// <remarks>
     /// 走的是与 <see cref="BuildByGroup"/> 完全相同的渲染代码路径，因此预览里看到的
     /// 就是第三步会写出的内容——不存在「预览与实际不一致」这种最伤信任的偏差。
-    /// <paramref name="projectRoot"/> 只决定写到哪里，不影响文本内容。
+    /// 预览不写盘，故无需 <c>projectRoot</c>：输出位置不影响文本内容。
     /// </remarks>
     /// <param name="shader"></param>
     /// <param name="textureFilePaths"></param>
     /// <param name="rules"></param>
     /// <param name="assetsRoot"></param>
-    /// <param name="projectRoot"></param>
     /// <param name="roleOverrides">逐文件手动槽位覆盖，见 <see cref="TextureAssigner.Assign"/>。</param>
     public static string Preview(
         ShaderTemplate shader,
         IEnumerable<string> textureFilePaths,
         IReadOnlyList<TextureSuffixRule> rules,
         string? assetsRoot,
-        string? projectRoot,
         IReadOnlyDictionary<string, TextureRole>? roleOverrides = null)
     {
         var assign = TextureAssigner.Assign(
-            shader, textureFilePaths, rules ?? Array.Empty<TextureSuffixRule>(), assetsRoot,
+            shader, textureFilePaths, rules ?? [], assetsRoot,
             roleOverrides);
         return RenderGroup(shader, assign.Assignments);
     }
@@ -291,10 +268,10 @@ public static class VmatBuildService
     /// <param name="assetsRoot">贴图根目录；<c>.vmat</c> 内写相对它的路径。</param>
     /// <param name="projectRoot">.vmat 输出根目录；输出会镜像贴图相对资产根的子目录。</param>
     /// <param name="progress"></param>
-    /// <param name="cancellationToken"></param>
     /// <param name="overwriteExisting">同名 .vmat 已存在时是否覆盖；默认 <c>false</c>，
     /// 向导第三步生成时传 <c>true</c>：直接覆盖，不再跳过。</param>
     /// <param name="roleOverrides">逐文件手动槽位覆盖，见 <see cref="TextureAssigner.Assign"/>。</param>
+    /// <param name="cancellationToken">取消令牌；每组开始前检查。约定摆在参数表最后。</param>
     public static VmatBuildResult BuildByGroup(
         ShaderTemplate shader,
         IReadOnlyDictionary<string, List<string>> plan,
@@ -302,11 +279,11 @@ public static class VmatBuildService
         string? assetsRoot,
         string? projectRoot,
         IProgress<VmatBuildProgress>? progress = null,
-        CancellationToken cancellationToken = default,
         bool overwriteExisting = false,
-        IReadOnlyDictionary<string, TextureRole>? roleOverrides = null)
+        IReadOnlyDictionary<string, TextureRole>? roleOverrides = null,
+        CancellationToken cancellationToken = default)
     {
-        var ruleList = rules ?? Array.Empty<TextureSuffixRule>();
+        var ruleList = rules ?? [];
         var written = new List<string>();
         var skipped = new List<string>();
         var unassigned = new List<string>();
@@ -427,7 +404,7 @@ public static class VmatBuildService
         foreach (var a in assignments)
             values[a.ParameterKey] = a.VmatPath;
 
-        return new VmatGenerator().Render(
+        return VmatGenerator.Render(
             shader,
             values,
             systemAttributeOverrides: shader.SystemAttributeDefaults.ToDictionary(kv => kv.Key, kv => kv.Value));

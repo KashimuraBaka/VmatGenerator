@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
@@ -22,42 +22,34 @@ public enum SettingsLoadOutcome
 }
 
 /// <summary>一次配置加载的诊断信息（规格 §3.4）。</summary>
-public sealed class SettingsLoadReport
+/// <remarks>构造加载报告。</remarks>
+/// <param name="outcome">加载结果分类。</param>
+/// <param name="loadedFromDisk">是否真的读到了磁盘内容。</param>
+/// <param name="errorMessage">错误摘要；成功时为 <c>null</c>。</param>
+/// <param name="backupFilePath">损坏文件的备份路径；未备份时为 <c>null</c>。</param>
+/// <param name="repairedFields">被修复的字段名列表。</param>
+public sealed class SettingsLoadReport(
+    SettingsLoadOutcome outcome,
+    bool loadedFromDisk,
+    string? errorMessage,
+    string? backupFilePath,
+    IReadOnlyList<string> repairedFields)
 {
-    /// <summary>构造加载报告。</summary>
-    /// <param name="outcome">加载结果分类。</param>
-    /// <param name="loadedFromDisk">是否真的读到了磁盘内容。</param>
-    /// <param name="errorMessage">错误摘要；成功时为 <c>null</c>。</param>
-    /// <param name="backupFilePath">损坏文件的备份路径；未备份时为 <c>null</c>。</param>
-    /// <param name="repairedFields">被修复的字段名列表。</param>
-    public SettingsLoadReport(
-        SettingsLoadOutcome outcome,
-        bool loadedFromDisk,
-        string? errorMessage,
-        string? backupFilePath,
-        IReadOnlyList<string> repairedFields)
-    {
-        Outcome = outcome;
-        LoadedFromDisk = loadedFromDisk;
-        ErrorMessage = errorMessage;
-        BackupFilePath = backupFilePath;
-        RepairedFields = repairedFields;
-    }
 
     /// <summary>加载结果分类。</summary>
-    public SettingsLoadOutcome Outcome { get; }
+    public SettingsLoadOutcome Outcome { get; } = outcome;
 
     /// <summary>是否真的读到了磁盘内容。</summary>
-    public bool LoadedFromDisk { get; }
+    public bool LoadedFromDisk { get; } = loadedFromDisk;
 
     /// <summary>错误摘要；成功时为 <c>null</c>。</summary>
-    public string? ErrorMessage { get; }
+    public string? ErrorMessage { get; } = errorMessage;
 
     /// <summary>损坏文件的备份路径；未备份时为 <c>null</c>。</summary>
-    public string? BackupFilePath { get; }
+    public string? BackupFilePath { get; } = backupFilePath;
 
     /// <summary>被修复的字段名（形如 <c>schemaVersion</c>、<c>rules[3].suffix(重复)</c>）。</summary>
-    public IReadOnlyList<string> RepairedFields { get; }
+    public IReadOnlyList<string> RepairedFields { get; } = repairedFields;
 
     /// <summary>可直接展示给用户的状态栏文案。</summary>
     /// <returns>中文说明；无异常时返回描述结果的短语。</returns>
@@ -77,27 +69,21 @@ public sealed class SettingsLoadReport
 }
 
 /// <summary>一次配置保存的诊断信息。</summary>
-public sealed class SettingsSaveReport
+/// <remarks>构造保存报告。</remarks>
+/// <param name="success">是否写入成功。</param>
+/// <param name="filePath">目标文件路径。</param>
+/// <param name="errorMessage">错误摘要；成功时为 <c>null</c>。</param>
+public sealed class SettingsSaveReport(bool success, string filePath, string? errorMessage)
 {
-    /// <summary>构造保存报告。</summary>
-    /// <param name="success">是否写入成功。</param>
-    /// <param name="filePath">目标文件路径。</param>
-    /// <param name="errorMessage">错误摘要；成功时为 <c>null</c>。</param>
-    public SettingsSaveReport(bool success, string filePath, string? errorMessage)
-    {
-        Success = success;
-        FilePath = filePath;
-        ErrorMessage = errorMessage;
-    }
 
     /// <summary>是否写入成功。</summary>
-    public bool Success { get; }
+    public bool Success { get; } = success;
 
     /// <summary>目标文件路径。</summary>
-    public string FilePath { get; }
+    public string FilePath { get; } = filePath;
 
     /// <summary>错误摘要；成功时为 <c>null</c>。</summary>
-    public string? ErrorMessage { get; }
+    public string? ErrorMessage { get; } = errorMessage;
 
     /// <summary>调试用摘要。</summary>
     /// <returns>人可读的一行描述。</returns>
@@ -152,21 +138,18 @@ public static class VmatGeneratorSettingsStore
     /// <c>null</c>，此时 <see cref="SettingsLoadReport.ErrorMessage"/> 非空，调用方应改用
     /// <see cref="LoadOrDefault"/>。<b>本方法不会抛异常。</b>
     /// </returns>
-    public static VmatGeneratorSettings? Load(out SettingsLoadReport report) =>
-        LoadFromFile(VmatGeneratorSettings.SettingsFilePath, out report);
+    public static VmatGeneratorSettings? Load(out SettingsLoadReport report) => LoadFromFile(VmatGeneratorSettings.SettingsFilePath, out report);
 
     /// <summary>读取配置，失败时静默回退默认配置，绝不返回 <c>null</c>，绝不抛异常。</summary>
     /// <returns>一份可用的配置实例。</returns>
-    public static VmatGeneratorSettings LoadOrDefault() =>
-        Load(out _) ?? VmatGeneratorSettings.CreateDefault();
+    public static VmatGeneratorSettings LoadOrDefault() => Load(out _) ?? VmatGeneratorSettings.CreateDefault();
 
     /// <summary>把配置序列化为 JSON 文本。<b>不碰任何存储介质。</b></summary>
     /// <remarks>
     /// 抽出这一步，是为了让「存到哪里」和「怎么编码」解耦：JSON 文件存储与注册表存储
     /// 共用同一套编码，因此换存储位置不会让配置内容悄悄变样。
     /// </remarks>
-    public static string ToJson(VmatGeneratorSettings settings) =>
-        JsonSerializer.Serialize(settings, WriteOptions);
+    public static string ToJson(VmatGeneratorSettings settings) => JsonSerializer.Serialize(settings, WriteOptions);
 
     /// <summary>宽松解析 JSON 文本为配置。<b>不碰任何存储介质。</b></summary>
     /// <param name="text">JSON 文本。</param>
@@ -182,7 +165,7 @@ public static class VmatGeneratorSettingsStore
         out IReadOnlyList<string> repaired,
         out string? error)
     {
-        repaired = Array.Empty<string>();
+        repaired = [];
         error = null;
 
         if (string.IsNullOrWhiteSpace(text))
@@ -267,8 +250,7 @@ public static class VmatGeneratorSettingsStore
     /// </summary>
     /// <param name="settings">待保存的配置；为 <c>null</c> 返回失败报告。</param>
     /// <returns>保存结果；<b>本方法不会抛异常</b>。</returns>
-    public static SettingsSaveReport Save(VmatGeneratorSettings settings) =>
-        SaveToFile(settings, VmatGeneratorSettings.SettingsFilePath);
+    public static SettingsSaveReport Save(VmatGeneratorSettings settings) => SaveToFile(settings, VmatGeneratorSettings.SettingsFilePath);
 
     // ── 内部实现（供自检与未来的测试入口复用，避免触碰用户真实配置）────────────
 
@@ -279,11 +261,11 @@ public static class VmatGeneratorSettingsStore
             // ① 文件不存在 —— 返回默认配置，不写盘。
             if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
             {
-                report = new SettingsLoadReport(SettingsLoadOutcome.Defaulted, false, null, null, Array.Empty<string>());
+                report = new SettingsLoadReport(SettingsLoadOutcome.Defaulted, false, null, null, []);
                 return VmatGeneratorSettings.CreateDefault();
             }
 
-            byte[] raw = Array.Empty<byte>();
+            byte[] raw = [];
             string text;
             try
             {
@@ -333,7 +315,7 @@ public static class VmatGeneratorSettingsStore
         catch (Exception ex)
         {
             // 极端兜底：绝不冒泡。返回 null，调用方按契约改用 LoadOrDefault()。
-            report = new SettingsLoadReport(SettingsLoadOutcome.Defaulted, false, $"加载设置时发生未预期错误：{ex.Message}", null, Array.Empty<string>());
+            report = new SettingsLoadReport(SettingsLoadOutcome.Defaulted, false, $"加载设置时发生未预期错误：{ex.Message}", null, []);
             return null;
         }
     }
@@ -472,7 +454,7 @@ public static class VmatGeneratorSettingsStore
     private static bool TryReadInt(JsonNode? node, out int value)
     {
         value = 0;
-        return node is JsonValue jv && jv.TryGetValue<int>(out value);
+        return node is JsonValue jv && jv.TryGetValue(out value);
     }
 
     private static bool TryReadString(JsonNode? node, out string value)
@@ -563,7 +545,7 @@ public static class VmatGeneratorSettingsStore
     private static SettingsLoadReport Corrupted(string path, byte[] raw, string message)
     {
         var backup = TryBackup(path, raw);
-        return new SettingsLoadReport(SettingsLoadOutcome.RecoveredFromCorruption, false, message, backup, Array.Empty<string>());
+        return new SettingsLoadReport(SettingsLoadOutcome.RecoveredFromCorruption, false, message, backup, []);
     }
 
     /// <summary>把损坏文件另存为 <c>settings.corrupt-&lt;时间戳&gt;.json</c>；失败不阻断。</summary>
@@ -595,8 +577,7 @@ public static class VmatGeneratorSettingsStore
         return new UTF8Encoding(false, false).GetString(raw, offset, raw.Length - offset);
     }
 
-    private static bool IsIoFailure(Exception ex) =>
-        ex is IOException
+    private static bool IsIoFailure(Exception ex) => ex is IOException
             or UnauthorizedAccessException
             or NotSupportedException
             or System.Security.SecurityException;

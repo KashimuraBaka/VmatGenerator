@@ -1,9 +1,4 @@
-using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
-using System.Threading;
-using System.Threading.Tasks;
-using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
 namespace GUI.Imaging;
@@ -31,7 +26,7 @@ namespace GUI.Imaging;
 /// <para>线程安全：所有状态都在同一把锁内修改，返回的 <see cref="BitmapSource"/>
 /// 已 <c>Freeze</c>，跨线程共享不会触发复制。</para>
 /// </summary>
-public sealed class ThumbnailCache
+public sealed class ThumbnailCache : IDisposable
 {
     /// <summary>进程内共享实例；缩略图只服务于扫描列表，没必要每窗口一份。</summary>
     public static ThumbnailCache Shared { get; } = new();
@@ -41,7 +36,7 @@ public sealed class ThumbnailCache
 
     private const long DefaultBudgetBytes = 32L * 1024 * 1024;
 
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
     private readonly Dictionary<string, Entry> _entries = new(StringComparer.OrdinalIgnoreCase);
     private readonly LinkedList<string> _recency = new();
     private readonly SemaphoreSlim _decodeGate = new(2, 2);
@@ -217,4 +212,10 @@ public sealed class ThumbnailCache
             return null;
         }
     }
+
+    /// <summary>
+    /// 释放解码闸门的内核等待句柄。进程内共享实例（<see cref="Shared"/>）
+    /// 一般活到进程结束，无需显式调用；重复调用安全。
+    /// </summary>
+    public void Dispose() => _decodeGate.Dispose();
 }

@@ -47,65 +47,53 @@ public enum TextureResolveFailure
 /// <summary>
 /// 某个角色在某模板上的一个合格参数键候选（规格 §5.3 / §5.4）。不可变值对象。
 /// </summary>
-public sealed class TextureKeyCandidate
+/// <remarks>构造候选。</remarks>
+/// <param name="parameterKey">该参数在 <c>ShaderTemplate.Parameters</c> 中的键名。</param>
+/// <param name="role">本候选服务的角色。</param>
+/// <param name="tier">命中档位。</param>
+/// <param name="derivedChannel">剥掉 <c>Texture</c> 前缀、Layer 前缀与尾号后的通道名。</param>
+/// <param name="qualifier">P5 档的非空限定词；其余档位为 <c>null</c>。</param>
+/// <param name="layerNumber">Layer 序号，<c>0</c> 表示无 Layer 前缀。</param>
+/// <param name="trailingNumber">末尾数字尾号，<c>0</c> 表示无尾号。</param>
+/// <param name="parameterIndex">该参数在模板 <c>Parameters</c> 中的声明下标。</param>
+public sealed class TextureKeyCandidate(
+    string parameterKey,
+    TextureRole role,
+    TextureKeyTier tier,
+    string derivedChannel,
+    string? qualifier,
+    int layerNumber,
+    int trailingNumber,
+    int parameterIndex)
 {
-    /// <summary>构造候选。</summary>
-    /// <param name="parameterKey">该参数在 <c>ShaderTemplate.Parameters</c> 中的键名。</param>
-    /// <param name="role">本候选服务的角色。</param>
-    /// <param name="tier">命中档位。</param>
-    /// <param name="derivedChannel">剥掉 <c>Texture</c> 前缀、Layer 前缀与尾号后的通道名。</param>
-    /// <param name="qualifier">P5 档的非空限定词；其余档位为 <c>null</c>。</param>
-    /// <param name="layerNumber">Layer 序号，<c>0</c> 表示无 Layer 前缀。</param>
-    /// <param name="trailingNumber">末尾数字尾号，<c>0</c> 表示无尾号。</param>
-    /// <param name="parameterIndex">该参数在模板 <c>Parameters</c> 中的声明下标。</param>
-    public TextureKeyCandidate(
-        string parameterKey,
-        TextureRole role,
-        TextureKeyTier tier,
-        string derivedChannel,
-        string? qualifier,
-        int layerNumber,
-        int trailingNumber,
-        int parameterIndex)
-    {
-        ParameterKey = parameterKey;
-        Role = role;
-        Tier = tier;
-        DerivedChannel = derivedChannel;
-        Qualifier = qualifier;
-        LayerNumber = layerNumber;
-        TrailingNumber = trailingNumber;
-        ParameterIndex = parameterIndex;
-    }
 
     /// <summary>参数键，例如 <c>TextureLayer1Normal</c>。</summary>
-    public string ParameterKey { get; }
+    public string ParameterKey { get; } = parameterKey;
 
     /// <summary>本候选服务的角色。</summary>
-    public TextureRole Role { get; }
+    public TextureRole Role { get; } = role;
 
     /// <summary>命中档位。</summary>
-    public TextureKeyTier Tier { get; }
+    public TextureKeyTier Tier { get; } = tier;
 
     /// <summary>派生通道名，例如 <c>Normal</c> / <c>FoamNormal</c> / <c>TintMask</c>。</summary>
-    public string DerivedChannel { get; }
+    public string DerivedChannel { get; } = derivedChannel;
 
     /// <summary>P5 档的非空限定词（例如 <c>Foam</c>）；非 P5 档为 <c>null</c>。</summary>
-    public string? Qualifier { get; }
+    public string? Qualifier { get; } = qualifier;
 
     /// <summary>Layer 序号（<c>0</c> = 无 Layer 前缀）。</summary>
-    public int LayerNumber { get; }
+    public int LayerNumber { get; } = layerNumber;
 
     /// <summary>末尾数字尾号（<c>0</c> = 无尾号）。</summary>
-    public int TrailingNumber { get; }
+    public int TrailingNumber { get; } = trailingNumber;
 
     /// <summary>在 <c>ShaderTemplate.Parameters</c> 中的声明下标。</summary>
-    public int ParameterIndex { get; }
+    public int ParameterIndex { get; } = parameterIndex;
 
     /// <summary>调试用摘要。</summary>
     /// <returns>人可读的一行描述。</returns>
-    public override string ToString() =>
-        $"{ParameterKey}（{(int)Tier} {Tier}，channel={DerivedChannel}，layer={LayerNumber}，num={TrailingNumber}）";
+    public override string ToString() => $"{ParameterKey}（{(int)Tier} {Tier}，channel={DerivedChannel}，layer={LayerNumber}，num={TrailingNumber}）";
 }
 
 /// <summary>
@@ -147,7 +135,7 @@ public sealed class TextureRoleResolution
     /// 命中档位；未解析时为 <see cref="TextureKeyTier.None"/>。
     /// 多候选并列时虽然候选都属于 P5，但对调用方而言「没有命中任何档」，
     /// 故统一报告 <see cref="TextureKeyTier.None"/>，细节由 <see cref="Candidates"/> 与
-    /// <see cref="TextureRoleResolution.DiagnosticText"/> 承载。
+    /// <see cref="DiagnosticText"/> 承载。
     /// </summary>
     public TextureKeyTier Tier { get; }
 
@@ -188,10 +176,7 @@ public sealed class TextureRoleResolution
         TextureRole role,
         TextureResolveFailure reason,
         IReadOnlyList<TextureKeyCandidate> candidates,
-        string diagnosticText)
-    {
-        return new TextureRoleResolution(role, false, null, TextureKeyTier.None, candidates, reason, diagnosticText);
-    }
+        string diagnosticText) => new(role, false, null, TextureKeyTier.None, candidates, reason, diagnosticText);
 
     /// <summary>调试用摘要。</summary>
     /// <returns>诊断文本。</returns>
@@ -242,7 +227,7 @@ public static class TextureRoleResolver
     /// <returns>满足 §5.1 两条候选条件的参数键。</returns>
     public static IReadOnlyList<string> TextureParameterKeys(ShaderTemplate shader)
     {
-        if (shader?.Parameters is null) return Array.Empty<string>();
+        if (shader?.Parameters is null) return [];
         var keys = new List<string>();
         for (var i = 0; i < shader.Parameters.Count; i++)
         {
@@ -261,8 +246,7 @@ public static class TextureRoleResolver
     /// <c>TextureFoamNormal</c> → <c>FoamNormal</c>、<c>TextureCubeMap</c> → <c>CubeMap</c>。
     /// 键不以 <c>Texture</c> 开头（如 <c>SkyTexture</c>）时返回空串，表示「不参与自动分配」。
     /// </returns>
-    public static string DeriveChannel(string parameterKey) =>
-        TryParseKey(parameterKey, out var parsed) ? parsed.Channel : string.Empty;
+    public static string DeriveChannel(string parameterKey) => TryParseKey(parameterKey, out var parsed) ? parsed.Channel : string.Empty;
 
     /// <summary>
     /// 列出某角色在模板上的<b>最低命中档位内的全部候选</b>，已按 §5.4 排序（首个即胜者）。
@@ -273,9 +257,9 @@ public static class TextureRoleResolver
     /// <returns>已排序的候选列表。</returns>
     public static IReadOnlyList<TextureKeyCandidate> ResolveCandidates(ShaderTemplate shader, TextureRole role)
     {
-        if (shader?.Parameters is null || role == TextureRole.Unknown) return Array.Empty<TextureKeyCandidate>();
+        if (shader?.Parameters is null || role == TextureRole.Unknown) return [];
         var tokens = TextureRoleTokens.TokensOf(role);
-        if (tokens.Count == 0) return Array.Empty<TextureKeyCandidate>();
+        if (tokens.Count == 0) return [];
 
         var bestTier = TextureKeyTier.None;
         var candidates = new List<TextureKeyCandidate>();
@@ -284,7 +268,7 @@ public static class TextureRoleResolver
             var p = shader.Parameters[i];
             if (!IsCandidateParameter(p)) continue;
             if (!TryParseKey(p.Key, out var parsed)) continue;
-            var tier = Classify(role, tokens, parsed);
+            var tier = Classify(tokens, parsed);
             if (tier == TextureKeyTier.None) continue;
 
             var candidate = new TextureKeyCandidate(
@@ -311,7 +295,7 @@ public static class TextureRoleResolver
             }
         }
 
-        return candidates.Count == 0 ? Array.Empty<TextureKeyCandidate>() : SortByTier(candidates, bestTier);
+        return candidates.Count == 0 ? [] : SortByTier(candidates, bestTier);
     }
 
     /// <summary>
@@ -332,8 +316,8 @@ public static class TextureRoleResolver
             return TextureRoleResolution.Unresolved(
                 role,
                 TextureResolveFailure.NoMatchingKey,
-                Array.Empty<TextureKeyCandidate>(),
-                BuildDiagnosticText(role, TextureResolveFailure.NoMatchingKey, Array.Empty<TextureKeyCandidate>()));
+                [],
+                BuildDiagnosticText(role, TextureResolveFailure.NoMatchingKey, []));
         }
 
         var winner = candidates[0];
@@ -394,11 +378,11 @@ public static class TextureRoleResolver
         {
             // §5.6 组装细则：候选按 §5.4 第 2 排序键 ParameterIndex 升序（即模板声明序），
             // 建议后缀与之同序；不得改用旧的限定词长度序。
-            var ordered = (candidates ?? Array.Empty<TextureKeyCandidate>())
+            var ordered = (candidates ?? [])
                 .OrderBy(c => c.ParameterIndex)
                 .ToList();
             var keys = string.Join(" / ", ordered.Select(c => c.ParameterKey));
-            var suffixes = string.Join(" / ", ordered.Select(c => SuggestedSuffixFor(c)));
+            var suffixes = string.Join(" / ", ordered.Select(SuggestedSuffixFor));
             return $"该着色器没有通用的 {name} 槽位，候选为 {keys}；"
                  + $"请改用 {suffixes} 后缀，或改选其他着色器。";
         }
@@ -411,10 +395,7 @@ public static class TextureRoleResolver
     /// </summary>
     /// <param name="candidate">P5 候选。</param>
     /// <returns>形如 <c>_foamnormal</c> 的建议后缀。</returns>
-    public static string SuggestedSuffixFor(TextureKeyCandidate candidate)
-    {
-        return candidate is null ? string.Empty : SuggestedSuffixForCore(candidate.DerivedChannel);
-    }
+    public static string SuggestedSuffixFor(TextureKeyCandidate candidate) => candidate is null ? string.Empty : SuggestedSuffixForCore(candidate.DerivedChannel);
 
     /// <summary>
     /// 由参数键机械派生建议后缀：去 <c>Texture</c> 前缀 → <see cref="string.ToLowerInvariant"/> → 前置 <c>_</c>。
@@ -432,8 +413,7 @@ public static class TextureRoleResolver
         return SuggestedSuffixForCore(stem);
     }
 
-    private static string SuggestedSuffixForCore(string stem) =>
-        string.IsNullOrEmpty(stem) ? string.Empty : "_" + stem.ToLowerInvariant();
+    private static string SuggestedSuffixForCore(string stem) => string.IsNullOrEmpty(stem) ? string.Empty : "_" + stem.ToLowerInvariant();
 
     /// <summary>
     /// 批量解析若干角色，返回 <c>角色 → 解析结果</c> 的映射（保持入参顺序）。
@@ -456,8 +436,7 @@ public static class TextureRoleResolver
     // ── 内部实现 ────────────────────────────────────────────────────────────
 
     /// <summary>§5.1 条件 ① + ②。</summary>
-    private static bool IsCandidateParameter(ShaderParamTemplate p) =>
-        p is not null
+    private static bool IsCandidateParameter(ShaderParamTemplate p) => p is not null
         && p.Key is not null
         && p.Key.StartsWith(TexturePrefix, StringComparison.Ordinal)
         && (p.Kind == ShaderParamKind.Texture || p.Shape == ShaderValueShape.TextureOrVector);
@@ -512,7 +491,7 @@ public static class TextureRoleResolver
     }
 
     /// <summary>§5.3 分档判定。返回 <see cref="TextureKeyTier.None"/> 表示不合格。</summary>
-    private static TextureKeyTier Classify(TextureRole role, IReadOnlyList<string> tokens, ParsedKey parsed)
+    private static TextureKeyTier Classify(IReadOnlyList<string> tokens, ParsedKey parsed)
     {
         var primary = tokens[0];
         var channel = parsed.Channel;
@@ -528,8 +507,10 @@ public static class TextureRoleResolver
             return TextureKeyTier.LayerPrefixed;
         // P4 派生通道名整体相等（此时启用别名）
         for (var i = 0; i < tokens.Count; i++)
+        {
             if (Matches(channel, tokens[i]))
                 return TextureKeyTier.DerivedChannelEqual;
+        }
         // P5 带限定词的复合通道：前缀非空
         return QualifierOf(channel, tokens) is not null ? TextureKeyTier.QualifiedComposite : TextureKeyTier.None;
     }
@@ -556,8 +537,7 @@ public static class TextureRoleResolver
         return string.IsNullOrEmpty(qualifier) ? null : qualifier;
     }
 
-    private static bool Matches(string channel, string token) =>
-        token.Length > 0 && channel.Equals(token, StringComparison.OrdinalIgnoreCase);
+    private static bool Matches(string channel, string token) => token.Length > 0 && channel.Equals(token, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// §5.4 同档确定性取舍。P5 已不再需要 <c>qualifier.Length</c> 排序键——
@@ -565,7 +545,7 @@ public static class TextureRoleResolver
     /// </summary>
     private static IReadOnlyList<TextureKeyCandidate> SortByTier(List<TextureKeyCandidate> candidates, TextureKeyTier tier)
     {
-        IOrderedEnumerable<TextureKeyCandidate> ordered = tier switch
+        var ordered = tier switch
         {
             TextureKeyTier.ExactNameNumbered => candidates.OrderBy(c => c.TrailingNumber),
             TextureKeyTier.LayerPrefixed => candidates.OrderBy(c => c.LayerNumber),
@@ -577,17 +557,10 @@ public static class TextureRoleResolver
             .ThenBy(c => c.ParameterKey, StringComparer.Ordinal)];
     }
 
-    private readonly struct ParsedKey
+    private readonly struct ParsedKey(int layer, int number, string channel)
     {
-        public ParsedKey(int layer, int number, string channel)
-        {
-            Layer = layer;
-            Number = number;
-            Channel = channel;
-        }
-
-        public int Layer { get; }
-        public int Number { get; }
-        public string Channel { get; }
+        public int Layer { get; } = layer;
+        public int Number { get; } = number;
+        public string Channel { get; } = channel;
     }
 }

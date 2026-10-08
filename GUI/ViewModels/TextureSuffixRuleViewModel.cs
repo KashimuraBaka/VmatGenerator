@@ -76,12 +76,10 @@ public sealed partial class TextureSuffixRuleViewModel : ObservableObject
     public TextureSuffixRule ToRule() => new(Suffix, ParseRole(Role), Enabled);
 
     /// <summary>从配置里的规则构造界面行（载入配置时使用）。</summary>
-    public static TextureSuffixRuleViewModel FromRule(TextureSuffixRule rule, MainViewModel? owner = null) =>
-        new(rule.Suffix, rule.Role, rule.Enabled) { Owner = owner };
+    public static TextureSuffixRuleViewModel FromRule(TextureSuffixRule rule, MainViewModel? owner = null) => new(rule.Suffix, rule.Role, rule.Enabled) { Owner = owner };
 
     /// <summary>枚举名 → 枚举；解析失败一律退回 <see cref="TextureRole.Unknown"/>。</summary>
-    public static TextureRole ParseRole(string? text) =>
-        TextureRoleTokens.TryParseRole(text, out var role) ? role : TextureRole.Unknown;
+    public static TextureRole ParseRole(string? text) => TextureRoleTokens.TryParseRole(text, out var role) ? role : TextureRole.Unknown;
 
     /// <summary>
     /// 派生属性的计算不应让界面崩溃（Lib 侧一旦有异常，这里退回可显示的原文）。

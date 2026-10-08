@@ -51,8 +51,7 @@ public static class VmatFormatter
         KVSerializer.Create(KVSerializationFormat.KeyValues1Text);
 
     /// <summary>按内容判定格式并解析：带 KV3 头的按 KV3 读，否则按 KV1 读。</summary>
-    private static KVDocument ParseDocument(string source) =>
-        source.TrimStart().StartsWith("<!--", StringComparison.Ordinal)
+    private static KVDocument ParseDocument(string source) => source.TrimStart().StartsWith("<!--", StringComparison.Ordinal)
             ? TryKv3(source) ?? Kv1Serializer.DeserializeWithSourceMap(source).Document
             : Kv1Serializer.DeserializeWithSourceMap(source).Document;
 
@@ -71,7 +70,7 @@ public static class VmatFormatter
 
     /// <summary>
     /// Parse <paramref name="source"/> and re-emit it in Valve's canonical layout.
-    /// Throws <see cref="System.ArgumentException"/> when the input is not valid KeyValues.
+    /// Throws <see cref="ArgumentException"/> when the input is not valid KeyValues.
     /// </summary>
     public static string Format(string source) => Write(ParseDocument(source));
 
@@ -105,12 +104,12 @@ public static class VmatFormatter
         // 直接照写即可；KV3 来源的文档顶层是匿名对象、没有文档名，此时若正文恰好
         // 只有一个集合子节点，就拿它的键当文档名并把它的子节点升为正文，
         // 避免写出空引号 "" 当顶层键——即完成 KV3 → KV1 的转换。
-        string name = document.Name ?? string.Empty;
+        var name = document.Name ?? string.Empty;
         var body = collection;
         if (name.Length == 0)
         {
             var first = default(KeyValuePair<string, KVObject>);
-            bool single = false;
+            var single = false;
             using (var e = collection.GetEnumerator())
             {
                 if (e.MoveNext())
@@ -141,8 +140,7 @@ public static class VmatFormatter
     /// Report whether the source already matches canonical formatting, i.e. whether
     /// <see cref="Format"/> would be a no-op.
     /// </summary>
-    public static bool IsCanonical(string source) =>
-        string.Equals(Format(source), source, StringComparison.Ordinal);
+    public static bool IsCanonical(string source) => string.Equals(Format(source), source, StringComparison.Ordinal);
 
     /// <summary>
     /// Structural equality between two VMAT texts, ignoring layout. Both sides are
@@ -156,10 +154,7 @@ public static class VmatFormatter
         return Same(docA, docB);
     }
 
-    private static bool Same(KVDocument a, KVDocument b)
-    {
-        return !string.Equals(a.Name, b.Name, StringComparison.Ordinal) ? false : SameChildren(a.Root, b.Root);
-    }
+    private static bool Same(KVDocument a, KVDocument b) => string.Equals(a.Name, b.Name, StringComparison.Ordinal) && SameChildren(a.Root, b.Root);
 
     private static bool SameChildren(KVObject a, KVObject b)
     {
@@ -180,16 +175,12 @@ public static class VmatFormatter
         }
     }
 
-    private static bool SameValue(KVObject a, KVObject b)
-    {
+    private static bool SameValue(KVObject a, KVObject b) =>
         // Compare by rendered text so that "1" and 1 (which serialize identically)
         // are treated the same, while ordering and nesting still have to match.
-        return a.ValueType != b.ValueType
-            ? false
-            : a.ValueType == KVValueType.Collection
+        a.ValueType == b.ValueType && (a.ValueType == KVValueType.Collection
                 ? SameChildren(a, b)
-                : a.ValueType == KVValueType.Array ? SameArray(a, b) : string.Equals(a.ToString(), b.ToString(), StringComparison.Ordinal);
-    }
+                : a.ValueType == KVValueType.Array ? SameArray(a, b) : string.Equals(a.ToString(), b.ToString(), StringComparison.Ordinal));
 
     private static bool SameArray(KVObject a, KVObject b)
     {

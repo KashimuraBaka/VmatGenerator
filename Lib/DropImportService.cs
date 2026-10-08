@@ -1,4 +1,4 @@
-namespace Lib;
+﻿namespace Lib;
 
 /// <summary>拖入内容的六类分档（规格 §2.2 的 D1–D6）。</summary>
 public enum DropCategory
@@ -26,66 +26,55 @@ public enum DropCategory
 }
 
 /// <summary>一次拖拽的展开结果（规格 §7.8）。不可变值对象。</summary>
-public sealed class DropAnalysis
+/// <remarks>构造分析结果。</remarks>
+/// <param name="category">六类分档之一。</param>
+/// <param name="vmatFiles">展开后发现的 <c>.vmat</c> 文件。</param>
+/// <param name="textureFiles">展开后发现的贴图文件。</param>
+/// <param name="otherFiles">既非 <c>.vmat</c> 也非贴图的文件。</param>
+/// <param name="materialRootCandidate">建议的材质根目录；不适用时为 <c>null</c>。</param>
+/// <param name="textureRootCandidate">建议的贴图根目录；不适用时为 <c>null</c>。</param>
+/// <param name="requiresRecursion">本次分析是否用到了递归枚举。</param>
+/// <param name="summary">面向用户的一行说明。</param>
+public sealed class DropAnalysis(
+    DropCategory category,
+    IReadOnlyList<string> vmatFiles,
+    IReadOnlyList<string> textureFiles,
+    IReadOnlyList<string> otherFiles,
+    string? materialRootCandidate,
+    string? textureRootCandidate,
+    bool requiresRecursion,
+    string summary)
 {
-    /// <summary>构造分析结果。</summary>
-    /// <param name="category">六类分档之一。</param>
-    /// <param name="vmatFiles">展开后发现的 <c>.vmat</c> 文件。</param>
-    /// <param name="textureFiles">展开后发现的贴图文件。</param>
-    /// <param name="otherFiles">既非 <c>.vmat</c> 也非贴图的文件。</param>
-    /// <param name="materialRootCandidate">建议的材质根目录；不适用时为 <c>null</c>。</param>
-    /// <param name="textureRootCandidate">建议的贴图根目录；不适用时为 <c>null</c>。</param>
-    /// <param name="requiresRecursion">本次分析是否用到了递归枚举。</param>
-    /// <param name="summary">面向用户的一行说明。</param>
-    public DropAnalysis(
-        DropCategory category,
-        IReadOnlyList<string> vmatFiles,
-        IReadOnlyList<string> textureFiles,
-        IReadOnlyList<string> otherFiles,
-        string? materialRootCandidate,
-        string? textureRootCandidate,
-        bool requiresRecursion,
-        string summary)
-    {
-        Category = category;
-        VmatFiles = vmatFiles;
-        TextureFiles = textureFiles;
-        OtherFiles = otherFiles;
-        MaterialRootCandidate = materialRootCandidate;
-        TextureRootCandidate = textureRootCandidate;
-        RequiresRecursion = requiresRecursion;
-        Summary = summary;
-    }
 
     /// <summary>六类分档之一。</summary>
-    public DropCategory Category { get; }
+    public DropCategory Category { get; } = category;
 
     /// <summary>展开后发现的 <c>.vmat</c> 文件。</summary>
-    public IReadOnlyList<string> VmatFiles { get; }
+    public IReadOnlyList<string> VmatFiles { get; } = vmatFiles;
 
     /// <summary>展开后发现的贴图文件。</summary>
-    public IReadOnlyList<string> TextureFiles { get; }
+    public IReadOnlyList<string> TextureFiles { get; } = textureFiles;
 
     /// <summary>既非 <c>.vmat</c> 也非贴图的文件。</summary>
-    public IReadOnlyList<string> OtherFiles { get; }
+    public IReadOnlyList<string> OtherFiles { get; } = otherFiles;
 
     /// <summary>
     /// 建议的材质根目录；混合内容时取「第一个含 <c>.vmat</c> 的目录」，
     /// 纯文件时取「第一个 <c>.vmat</c> 的父目录」；不适用时为 <c>null</c>。
     /// </summary>
-    public string? MaterialRootCandidate { get; }
+    public string? MaterialRootCandidate { get; } = materialRootCandidate;
 
     /// <summary>
     /// 建议的贴图根目录；纯贴图文件取公共父目录、只含贴图的文件夹取该目录本身；
     /// 不适用时为 <c>null</c>。
     /// </summary>
-    public string? TextureRootCandidate { get; }
+    public string? TextureRootCandidate { get; } = textureRootCandidate;
 
     /// <summary>本次分析是否用到了递归枚举。</summary>
-    public bool RequiresRecursion { get; }
+    public bool RequiresRecursion { get; } = requiresRecursion;
 
     /// <summary>面向用户的一行说明。</summary>
-    public string Summary { get; }
+    public string Summary { get; } = summary;
 
     /// <summary>没有任何可导入内容。</summary>
     public bool IsEmpty =>
@@ -93,8 +82,7 @@ public sealed class DropAnalysis
 
     /// <summary>调试用摘要。</summary>
     /// <returns>人可读的一行描述。</returns>
-    public override string ToString() =>
-        $"{Category}：.vmat {VmatFiles.Count} 个、贴图 {TextureFiles.Count} 张、无关 {OtherFiles.Count} 个";
+    public override string ToString() => $"{Category}：.vmat {VmatFiles.Count} 个、贴图 {TextureFiles.Count} 张、无关 {OtherFiles.Count} 个";
 }
 
 /// <summary>
@@ -104,7 +92,7 @@ public sealed class DropAnalysis
 ///
 /// <para><b>两个独立的递归开关。</b>§2.4 规定 <c>.vmat</c> 探测<b>始终</b>递归
 /// （否则拖入 <c>materials/</c> 这类父目录会一个材质都找不到），
-/// 而贴图枚举才受 <see cref="DropImportService.recurseTextureFolders"/> 控制——
+/// 而贴图枚举才受 <see cref="recurseTextureFolders"/> 控制——
 /// 贴图目录动辄上千张，默认递归代价高，用户可随时关掉。</para>
 ///
 /// <para><b>枚举预算。</b>每个目录最多枚举 5000 个条目，超出即截断，避免用户误拖
@@ -113,32 +101,24 @@ public sealed class DropAnalysis
 /// <para><b>失败隔离。</b>单个目录 <c>UnauthorizedAccessException</c> 或断链只跳过该目录，
 /// 不中断整体处理。</para>
 /// </summary>
-public sealed class DropImportService
+/// <remarks>
+/// 构造拖拽分析器。
+/// </remarks>
+/// <param name="scanner">
+/// 材质扫描器。分析阶段本身不需要真正解析 <c>.vmat</c>，这里保留引用以便 GUI
+/// 复用同一实例、避免重复构造；通过 <see cref="Scanner"/> 访问。
+/// </param>
+/// <param name="recurseTextureFolders">拖入贴图文件夹时是否递归扫描子目录（与 .vmat 探测无关）。</param>
+public sealed class DropImportService(MaterialScanner scanner, bool recurseTextureFolders)
 {
     /// <summary>单个目录的枚举上限（§2.4）。</summary>
     public const int EnumerationBudgetPerDirectory = 5000;
 
     private const string VmatExtension = ".vmat";
-
-    private readonly MaterialScanner _scanner;
-    private readonly bool recurseTextureFolders;
-
-    /// <summary>
-    /// 构造拖拽分析器。
-    /// </summary>
-    /// <param name="scanner">
-    /// 材质扫描器。分析阶段本身不需要真正解析 <c>.vmat</c>，这里保留引用以便 GUI
-    /// 复用同一实例、避免重复构造；通过 <see cref="Scanner"/> 访问。
-    /// </param>
-    /// <param name="recurseTextureFolders">拖入贴图文件夹时是否递归扫描子目录（与 .vmat 探测无关）。</param>
-    public DropImportService(MaterialScanner scanner, bool recurseTextureFolders)
-    {
-        _scanner = scanner;
-        this.recurseTextureFolders = recurseTextureFolders;
-    }
+    private readonly bool recurseTextureFolders = recurseTextureFolders;
 
     /// <summary>构造时传入的材质扫描器，供 GUI 复用（不参与本类的分析逻辑）。</summary>
-    internal MaterialScanner Scanner => _scanner;
+    internal MaterialScanner Scanner { get; } = scanner;
 
     /// <summary>
     /// 判断一组拖拽路径是否值得接收（§2.3 的等价判定）。
@@ -177,7 +157,7 @@ public sealed class DropImportService
         var truncated = false;
         var skippedSubfolderTextures = 0;
 
-        foreach (var raw in droppedPaths ?? Array.Empty<string>())
+        foreach (var raw in droppedPaths ?? [])
         {
             var path = raw?.Trim();
             if (string.IsNullOrEmpty(path)) continue;
@@ -241,8 +221,7 @@ public sealed class DropImportService
     }
 
     /// <summary>判定六类分档（§2.2 的判定条件列）。</summary>
-    private static DropCategory Classify(int vmatCount, int textureCount, int directoryCount) =>
-        vmatCount > 0 && textureCount > 0
+    private static DropCategory Classify(int vmatCount, int textureCount, int directoryCount) => vmatCount > 0 && textureCount > 0
             ? DropCategory.Mixed
             : vmatCount > 0
                 ? directoryCount > 0 ? DropCategory.MaterialFolder : DropCategory.VmatFile
@@ -318,7 +297,7 @@ public sealed class DropImportService
         }
     }
 
-    private string BuildSummary(
+    private static string BuildSummary(
         DropCategory category,
         List<string> vmatFiles,
         List<string> textureFiles,
@@ -347,7 +326,7 @@ public sealed class DropImportService
     }
 
     /// <summary>无关文件的扩展名清单：去点、去重、升序，用「、」连接（§2.2 注）。</summary>
-    private string ExtensionList(IReadOnlyList<string> files)
+    private static string ExtensionList(IReadOnlyList<string> files)
     {
         var extensions = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var file in files)

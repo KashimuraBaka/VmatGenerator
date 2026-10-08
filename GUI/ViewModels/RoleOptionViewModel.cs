@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using Lib;
 
 namespace GUI.ViewModels;
@@ -35,7 +32,7 @@ public sealed class RoleOptionViewModel
             .ToDictionary(option => (option.Role, option.IsSupported));
 
     /// <summary>供「还没按着色器筛选」时使用的空列表。</summary>
-    public static IReadOnlyList<RoleOptionViewModel> None { get; } = Array.Empty<RoleOptionViewModel>();
+    public static IReadOnlyList<RoleOptionViewModel> None { get; } = [];
 
     /// <summary>取某个「槽位 × 是否受支持」组合的唯一实例。</summary>
     /// <param name="role">候选项代表的槽位。</param>

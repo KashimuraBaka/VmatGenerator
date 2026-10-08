@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Lib;
 
@@ -20,26 +17,19 @@ namespace GUI.ViewModels;
 /// <see cref="ParsedSuffixes"/>，它经 <see cref="TextureSuffixMatcher.NormalizeName"/>
 /// 去掉前导下划线、转小写并去重。</para>
 /// </summary>
-public sealed partial class InferredSuffixViewModel : ObservableObject
+/// <remarks>构造一行推断结果。</remarks>
+/// <param name="set">Lib 层的推断结果。</param>
+/// <param name="existingSuffixes">
+/// 规则表里<b>已归一化</b>的后缀集合（小写、<b>无</b>前导下划线）；
+/// 候选同样归一化后再比对——候选带 <c>_</c>、规则表不带，直接比对永远不相等。
+/// </param>
+public sealed partial class InferredSuffixViewModel(InferredSuffixSet set, IReadOnlySet<string> existingSuffixes) : ObservableObject
 {
     /// <summary>后缀之间的分隔符。</summary>
     public const string Separator = "|";
 
-    private readonly InferredSuffixSet _set;
-    private IReadOnlySet<string> _existingSuffixes;
-
-    /// <summary>构造一行推断结果。</summary>
-    /// <param name="set">Lib 层的推断结果。</param>
-    /// <param name="existingSuffixes">
-    /// 规则表里<b>已归一化</b>的后缀集合（小写、<b>无</b>前导下划线）；
-    /// 候选同样归一化后再比对——候选带 <c>_</c>、规则表不带，直接比对永远不相等。
-    /// </param>
-    public InferredSuffixViewModel(InferredSuffixSet set, IReadOnlySet<string> existingSuffixes)
-    {
-        _set = set;
-        _existingSuffixes = existingSuffixes;
-        _suffixText = Format(set.Candidates);
-    }
+    private readonly InferredSuffixSet _set = set;
+    private IReadOnlySet<string> _existingSuffixes = existingSuffixes;
 
     /// <summary>语义槽位。</summary>
     public TextureRole Role => _set.Role;
@@ -54,7 +44,7 @@ public sealed partial class InferredSuffixViewModel : ObservableObject
     /// 可编辑的后缀文本，多个用 <c>|</c> 分隔。回车或失焦即生效。
     /// </summary>
     [ObservableProperty]
-    private string _suffixText;
+    private string _suffixText = Format(set.Candidates);
 
     /// <summary>是否把本行后缀并入本次扫描。</summary>
     [ObservableProperty]
@@ -82,7 +72,7 @@ public sealed partial class InferredSuffixViewModel : ObservableObject
 
     /// <summary>参与本次扫描时实际生效的后缀（仅在勾选时非空）。</summary>
     public IReadOnlyList<string> EffectiveSuffixes =>
-        IsEnabled ? ParsedSuffixes : Array.Empty<string>();
+        IsEnabled ? ParsedSuffixes : [];
 
     /// <summary>本行是否还有后缀；决定勾选框是否可用。</summary>
     public bool HasSuffixes => ParsedSuffixes.Count > 0;
@@ -109,12 +99,10 @@ public sealed partial class InferredSuffixViewModel : ObservableObject
     }
 
     /// <summary>把后缀列表拼成可编辑文本。</summary>
-    private static string Format(IEnumerable<string> suffixes) =>
-        string.Join($" {Separator} ", suffixes);
+    private static string Format(IEnumerable<string> suffixes) => string.Join($" {Separator} ", suffixes);
 
     /// <summary>把可编辑文本拆回后缀列表。</summary>
-    private static IReadOnlyList<string> Parse(string? text) =>
-        string.IsNullOrWhiteSpace(text)
+    private static IReadOnlyList<string> Parse(string? text) => string.IsNullOrWhiteSpace(text)
             ? Array.Empty<string>()
             : [.. text.Split(Separator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                   .Select(TextureSuffixMatcher.NormalizeName)

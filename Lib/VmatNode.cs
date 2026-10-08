@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Text;
 
 namespace Lib;
 
@@ -8,16 +7,12 @@ namespace Lib;
 /// (leaf) or children (sub-table). Values that look like <c>[x y z w]</c> vectors are
 /// exposed as <see cref="Vector4"/>.
 /// </summary>
-public sealed class VmatNode
+/// <inheritdoc/>
+public sealed class VmatNode(string key)
 {
-    /// <inheritdoc/>
-    public VmatNode(string key)
-    {
-        Key = key;
-    }
 
     /// <inheritdoc/>
-    public string Key { get; }
+    public string Key { get; } = key;
     /// <inheritdoc/>
     public string? Value { get; set; }
     /// <inheritdoc/>
@@ -27,27 +22,16 @@ public sealed class VmatNode
     public bool IsContainer => Children.Count > 0;
 
     /// <inheritdoc/>
-    public Vector4? TryParseVector()
-    {
-        return Value is null ? null : Vector4.TryParse(Value, out var v) ? v : null;
-    }
+    public Vector4? TryParseVector() => Value is null ? null : Vector4.TryParse(Value, out var v) ? v : null;
 
     /// <inheritdoc/>
-    public float? TryParseFloat()
-    {
-        return Value is null ? null : float.TryParse(Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var f) ? f : null;
-    }
+    public float? TryParseFloat() => Value is null ? null : float.TryParse(Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var f) ? f : null;
 
     /// <inheritdoc/>
-    public int? TryParseInt()
-    {
-        return Value is null ? null : int.TryParse(Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var i) ? i : null;
-    }
+    public int? TryParseInt() => Value is null ? null : int.TryParse(Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var i) ? i : null;
 
     /// <inheritdoc/>
-    public bool? TryParseBool()
-    {
-        return Value is null
+    public bool? TryParseBool() => Value is null
             ? null
             : Value switch
             {
@@ -55,7 +39,6 @@ public sealed class VmatNode
                 "0" => false,
                 _ => bool.TryParse(Value, out var b) ? b : null,
             };
-    }
 
     /// <inheritdoc/>
     public VmatNode? FindChild(string name)
@@ -80,7 +63,7 @@ public sealed class VmatNode
     /// there is exactly one output layout in the project.
     /// </para>
     /// </summary>
-    public string Serialize(int indentLevel = 0) => VmatFormat.Serialize(this);
+    public string Serialize() => VmatFormat.Serialize(this);
 
     /// <inheritdoc/>
     public override string ToString() => IsContainer ? $"{{{Key}, {Children.Count} children}}" : $"{Key} = {Value}";
@@ -101,7 +84,7 @@ public readonly record struct Vector4(float X, float Y, float Z, float W)
         var parts = inner.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length < 1) return false;
         float y = 0, z = 0, w = 0;
-        if (!float.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out float x)) return false;
+        if (!float.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var x)) return false;
         if (parts.Length > 1 && !float.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out y)) return false;
         if (parts.Length > 2 && !float.TryParse(parts[2], NumberStyles.Float, CultureInfo.InvariantCulture, out z)) return false;
         if (parts.Length > 3 && !float.TryParse(parts[3], NumberStyles.Float, CultureInfo.InvariantCulture, out w)) return false;
@@ -112,6 +95,5 @@ public readonly record struct Vector4(float X, float Y, float Z, float W)
     // Source 2 convention: vectors are always emitted with 6 fixed decimals so the
     // diff with the original .vmat file is whitespace-only.
     /// <inheritdoc/>
-    public override string ToString() =>
-        $"[{X.ToString("0.000000", CultureInfo.InvariantCulture)} {Y.ToString("0.000000", CultureInfo.InvariantCulture)} {Z.ToString("0.000000", CultureInfo.InvariantCulture)} {W.ToString("0.000000", CultureInfo.InvariantCulture)}]";
+    public override string ToString() => $"[{X.ToString("0.000000", CultureInfo.InvariantCulture)} {Y.ToString("0.000000", CultureInfo.InvariantCulture)} {Z.ToString("0.000000", CultureInfo.InvariantCulture)} {W.ToString("0.000000", CultureInfo.InvariantCulture)}]";
 }

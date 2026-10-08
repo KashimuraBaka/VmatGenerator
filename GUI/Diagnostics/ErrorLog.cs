@@ -1,3 +1,4 @@
+﻿using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.IO;
 using System.Text;
@@ -77,10 +78,8 @@ public static class ErrorLog
     /// <summary>内存中保留的记录条数上限。</summary>
     public const int MaxRecentEntries = 500;
 
-    private static readonly object Gate = new();
+    private static readonly Lock Gate = new();
     private static readonly Queue<ErrorEntry> RecentQueue = new();
-    private static string? _logDirectory;
-    private static string? _logFilePath;
     private static bool _directoryResolved;
 
     /// <summary>提升事件：新增一条记录时触发（用于 UI 实时刷新）。</summary>
@@ -105,13 +104,14 @@ public static class ErrorLog
     /// </list>
     /// 每个候选目录都会真正试写一次，避免「配好了但不可写却在静默丢日志」。
     /// </summary>
+    [AllowNull]
     public static string LogDirectory
     {
         get
         {
-            if (_directoryResolved) return _logDirectory ?? Path.GetTempPath();
+            if (_directoryResolved) return field ?? Path.GetTempPath();
 
-            var failures = new System.Text.StringBuilder();
+            var failures = new StringBuilder();
             foreach (var candidate in CandidateDirectories())
             {
                 try
@@ -122,11 +122,11 @@ public static class ErrorLog
                     File.WriteAllText(probe, "1");
                     File.Delete(probe);
 
-                    _logDirectory = candidate;
-                    _logFilePath = Path.Combine(candidate, FileName);
+                    field = candidate;
+                    LogFilePath = Path.Combine(candidate, FileName);
                     LastWriteError = null;
                     _directoryResolved = true;
-                    return _logDirectory;
+                    return field;
                 }
                 catch (Exception ex)
                 {
@@ -136,17 +136,19 @@ public static class ErrorLog
 
             // 一个都不可写：记下原因，内存记录继续工作。
             LastWriteError = "所有候选日志目录均不可写：" + Environment.NewLine + failures.ToString().TrimEnd();
-            _logDirectory = Path.GetTempPath();
-            _logFilePath = Path.Combine(_logDirectory, FileName);
+            field = Path.GetTempPath();
+            LogFilePath = Path.Combine(field, FileName);
             _directoryResolved = true;
-            return _logDirectory;
+            return field;
         }
+
+        private set;
     }
 
     /// <summary>按优先级列出候选日志目录。</summary>
     private static IEnumerable<string> CandidateDirectories()
     {
-        string localAppData = string.Empty;
+        var localAppData = string.Empty;
         try { localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData); }
         catch { /* 忽略 */ }
 
@@ -166,14 +168,17 @@ public static class ErrorLog
     }
 
     /// <summary>日志文件完整路径。</summary>
+    [AllowNull]
     public static string LogFilePath
     {
         get
         {
             // LogDirectory 的解析会顺带设置 _logFilePath。
             _ = LogDirectory;
-            return _logFilePath ?? Path.Combine(Path.GetTempPath(), FileName);
+            return field ?? Path.Combine(Path.GetTempPath(), FileName);
         }
+
+        private set;
     }
 
     /// <summary>清空缓存的日志目录解析结果（供测试或需要重新探测时使用）。</summary>
@@ -181,8 +186,8 @@ public static class ErrorLog
     {
         lock (Gate)
         {
-            _logDirectory = null;
-            _logFilePath = null;
+            LogDirectory = null;
+            LogFilePath = null;
             _directoryResolved = false;
             LastWriteError = null;
         }
@@ -242,16 +247,13 @@ public static class ErrorLog
     }
 
     /// <summary>便捷重载：普通信息记录。</summary>
-    public static void Info(string operation, string control) =>
-        Write(ErrorSeverity.Info, operation, control, null);
+    public static void Info(string operation, string control) => Write(ErrorSeverity.Info, operation, control, null);
 
     /// <summary>便捷重载：警告记录。</summary>
-    public static void Warn(string operation, string control, Exception? ex = null) =>
-        Write(ErrorSeverity.Warning, operation, control, ex);
+    public static void Warn(string operation, string control, Exception? ex = null) => Write(ErrorSeverity.Warning, operation, control, ex);
 
     /// <summary>便捷重载：错误记录。</summary>
-    public static void Error(string operation, string control, Exception? ex) =>
-        Write(ErrorSeverity.Error, operation, control, ex);
+    public static void Error(string operation, string control, Exception? ex) => Write(ErrorSeverity.Error, operation, control, ex);
 
     /// <summary>读取磁盘上的全部日志文本（用于「打开日志文件」失败时的兜底展示）。</summary>
     public static string ReadAll()

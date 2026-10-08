@@ -3,37 +3,29 @@ namespace Lib;
 /// <summary>
 /// 一条「文件 → 着色器参数」的最终分配记录（规格 §7.7）。不可变值对象。
 /// </summary>
-public sealed class TextureAssignment
+/// <remarks>构造分配记录。</remarks>
+/// <param name="filePath">源文件路径（原样）。</param>
+/// <param name="vmatPath">写入 VMAT 的最终值（贴图根目录内为相对路径 + 正斜杠）。</param>
+/// <param name="role">命中的语义槽位。</param>
+/// <param name="parameterKey">目标参数键。</param>
+/// <param name="matchedSuffix">命中的归一化后缀。</param>
+public sealed class TextureAssignment(string filePath, string vmatPath, TextureRole role, string parameterKey, string matchedSuffix)
 {
-    /// <summary>构造分配记录。</summary>
-    /// <param name="filePath">源文件路径（原样）。</param>
-    /// <param name="vmatPath">写入 VMAT 的最终值（贴图根目录内为相对路径 + 正斜杠）。</param>
-    /// <param name="role">命中的语义槽位。</param>
-    /// <param name="parameterKey">目标参数键。</param>
-    /// <param name="matchedSuffix">命中的归一化后缀。</param>
-    public TextureAssignment(string filePath, string vmatPath, TextureRole role, string parameterKey, string matchedSuffix)
-    {
-        FilePath = filePath;
-        VmatPath = vmatPath;
-        Role = role;
-        ParameterKey = parameterKey;
-        MatchedSuffix = matchedSuffix;
-    }
 
     /// <summary>源文件路径（原样，不做改写）。</summary>
-    public string FilePath { get; }
+    public string FilePath { get; } = filePath;
 
     /// <summary>写入 VMAT 的最终值。</summary>
-    public string VmatPath { get; }
+    public string VmatPath { get; } = vmatPath;
 
     /// <summary>命中的语义槽位。</summary>
-    public TextureRole Role { get; }
+    public TextureRole Role { get; } = role;
 
     /// <summary>目标参数键，例如 <c>TextureLayer1Normal</c>。</summary>
-    public string ParameterKey { get; }
+    public string ParameterKey { get; } = parameterKey;
 
     /// <summary>命中的归一化后缀，例如 <c>normal</c>。</summary>
-    public string MatchedSuffix { get; }
+    public string MatchedSuffix { get; } = matchedSuffix;
 
     /// <summary>调试用摘要。</summary>
     /// <returns>人可读的一行描述。</returns>
@@ -43,35 +35,28 @@ public sealed class TextureAssignment
 /// <summary>
 /// 「多个贴图命中同一槽位」的冲突记录（规格 §6.5）。不可变值对象。
 /// </summary>
-public sealed class TextureConflict
+/// <remarks>构造冲突记录。</remarks>
+/// <param name="role">发生冲突的槽位。</param>
+/// <param name="keptFilePath">胜出并将被写入的文件路径。</param>
+/// <param name="droppedFilePaths">被淘汰、未写入的文件路径。</param>
+/// <param name="reason">面向用户的中文原因说明。</param>
+public sealed class TextureConflict(TextureRole role, string keptFilePath, IReadOnlyList<string> droppedFilePaths, string reason)
 {
-    /// <summary>构造冲突记录。</summary>
-    /// <param name="role">发生冲突的槽位。</param>
-    /// <param name="keptFilePath">胜出并将被写入的文件路径。</param>
-    /// <param name="droppedFilePaths">被淘汰、未写入的文件路径。</param>
-    /// <param name="reason">面向用户的中文原因说明。</param>
-    public TextureConflict(TextureRole role, string keptFilePath, IReadOnlyList<string> droppedFilePaths, string reason)
-    {
-        Role = role;
-        KeptFilePath = keptFilePath;
-        DroppedFilePaths = droppedFilePaths;
-        Reason = reason;
-    }
 
     /// <summary>发生冲突的槽位。</summary>
-    public TextureRole Role { get; }
+    public TextureRole Role { get; } = role;
 
     /// <summary>胜出的文件路径。</summary>
-    public string KeptFilePath { get; }
+    public string KeptFilePath { get; } = keptFilePath;
 
     /// <summary>被淘汰的文件路径（不会写入任何参数）。</summary>
-    public IReadOnlyList<string> DroppedFilePaths { get; }
+    public IReadOnlyList<string> DroppedFilePaths { get; } = droppedFilePaths;
 
     /// <summary>
     /// 面向用户的原因说明，形如
     /// <c>同槽位冲突（Normal），已保留 brick_normal.png</c>。
     /// </summary>
-    public string Reason { get; }
+    public string Reason { get; } = reason;
 
     /// <summary>调试用摘要。</summary>
     /// <returns>人可读的一行描述。</returns>
@@ -81,62 +66,52 @@ public sealed class TextureConflict
 /// <summary>
 /// 一次贴图自动分配的结果（规格 §7.7）。不可变值对象。
 /// </summary>
-public sealed class TextureAssignResult
+/// <remarks>构造分配结果。</remarks>
+/// <param name="assignments">成功分配记录。</param>
+/// <param name="conflicts">同槽位冲突记录。</param>
+/// <param name="unassignedFiles">未命中任何启用规则的文件路径。</param>
+/// <param name="unresolvedRoles">命中了规则但无法确定参数键的角色解析结果。</param>
+/// <param name="totalFiles">本次输入的文件总数。</param>
+/// <param name="suggestedTextureRoot">当传入的贴图根目录为空时建议的贴图根目录。</param>
+public sealed class TextureAssignResult(
+    IReadOnlyList<TextureAssignment> assignments,
+    IReadOnlyList<TextureConflict> conflicts,
+    IReadOnlyList<string> unassignedFiles,
+    IReadOnlyList<TextureRoleResolution> unresolvedRoles,
+    int totalFiles,
+    string? suggestedTextureRoot)
 {
-    /// <summary>构造分配结果。</summary>
-    /// <param name="assignments">成功分配记录。</param>
-    /// <param name="conflicts">同槽位冲突记录。</param>
-    /// <param name="unassignedFiles">未命中任何启用规则的文件路径。</param>
-    /// <param name="unresolvedRoles">命中了规则但无法确定参数键的角色解析结果。</param>
-    /// <param name="totalFiles">本次输入的文件总数。</param>
-    /// <param name="suggestedTextureRoot">当传入的贴图根目录为空时建议的贴图根目录。</param>
-    public TextureAssignResult(
-        IReadOnlyList<TextureAssignment> assignments,
-        IReadOnlyList<TextureConflict> conflicts,
-        IReadOnlyList<string> unassignedFiles,
-        IReadOnlyList<TextureRoleResolution> unresolvedRoles,
-        int totalFiles,
-        string? suggestedTextureRoot)
-    {
-        Assignments = assignments;
-        Conflicts = conflicts;
-        UnassignedFiles = unassignedFiles;
-        UnresolvedRoles = unresolvedRoles;
-        TotalFiles = totalFiles;
-        SuggestedTextureRoot = suggestedTextureRoot;
-    }
 
     /// <summary>成功分配记录，按槽位首次出现顺序排列。</summary>
-    public IReadOnlyList<TextureAssignment> Assignments { get; }
+    public IReadOnlyList<TextureAssignment> Assignments { get; } = assignments;
 
     /// <summary>同槽位冲突记录。</summary>
-    public IReadOnlyList<TextureConflict> Conflicts { get; }
+    public IReadOnlyList<TextureConflict> Conflicts { get; } = conflicts;
 
     /// <summary>未命中任何启用规则（或不是贴图）的文件路径。</summary>
-    public IReadOnlyList<string> UnassignedFiles { get; }
+    public IReadOnlyList<string> UnassignedFiles { get; } = unassignedFiles;
 
     /// <summary>
     /// 命中了规则、但无法确定参数键的角色解析结果。
     /// 典型来源：P5 多候选并列（水面着色器的 <c>Normal</c>），或模板确实没有对应键。
     /// </summary>
-    public IReadOnlyList<TextureRoleResolution> UnresolvedRoles { get; }
+    public IReadOnlyList<TextureRoleResolution> UnresolvedRoles { get; } = unresolvedRoles;
 
     /// <summary>本次输入的文件总数（去重后）。</summary>
-    public int TotalFiles { get; }
+    public int TotalFiles { get; } = totalFiles;
 
     /// <summary>
     /// 当传入的 <c>textureRoot</c> 为空时，按所有输入文件给出的建议贴图根目录；
     /// 传入非空时为 <c>null</c>，表示「已有贴图根目录，不必改动」。
     /// </summary>
-    public string? SuggestedTextureRoot { get; }
+    public string? SuggestedTextureRoot { get; } = suggestedTextureRoot;
 
     /// <summary>没有任何文件被写入时返回 <c>true</c>，GUI 据此断言「未置脏」。</summary>
     public bool HasNoWrites => Assignments.Count == 0;
 
     /// <summary>调试用摘要。</summary>
     /// <returns>人可读的一行描述。</returns>
-    public override string ToString() =>
-        $"共 {TotalFiles} 个文件 → 写入 {Assignments.Count} 项、冲突 {Conflicts.Count} 组、未命中 {UnassignedFiles.Count} 个、未解析 {UnresolvedRoles.Count} 个槽位";
+    public override string ToString() => $"共 {TotalFiles} 个文件 → 写入 {Assignments.Count} 项、冲突 {Conflicts.Count} 组、未命中 {UnassignedFiles.Count} 个、未解析 {UnresolvedRoles.Count} 个槽位";
 }
 
 /// <summary>
@@ -189,7 +164,7 @@ public static class TextureAssigner
         IReadOnlyDictionary<string, TextureRole>? roleOverrides = null)
     {
         var input = NormalizeInput(textureFilePaths);
-        var matcher = new TextureSuffixMatcher(rules ?? Array.Empty<TextureSuffixRule>());
+        var matcher = new TextureSuffixMatcher(rules ?? []);
 
         var unassigned = new List<string>();
         var byRole = new Dictionary<TextureRole, List<GroupBucket>>();
@@ -275,7 +250,7 @@ public static class TextureAssigner
                 winner.Match.FilePath,
                 TexturePathRules.ToVmatPath(winner.Match.FilePath, textureRoot),
                 role,
-                resolution.ParameterKey!,
+                resolution.ParameterKey,
                 winner.Match.MatchedSuffix));
         }
 
@@ -298,7 +273,7 @@ public static class TextureAssigner
     /// </summary>
     private static GroupBucket PickWinner(List<GroupBucket> bucket)
     {
-        GroupBucket best = bucket[0];
+        var best = bucket[0];
         for (var i = 1; i < bucket.Count; i++)
         {
             if (IsBetter(bucket[i], best)) best = bucket[i];
@@ -322,10 +297,7 @@ public static class TextureAssigner
     /// 包括 <see cref="TextureRole.Unknown"/>——它表示调用方的<b>显式排除</b>。
     /// </summary>
     private static TextureRole? LookupOverride(
-        IReadOnlyDictionary<string, TextureRole>? overrides, string path)
-    {
-        return overrides is null || overrides.Count == 0 ? null : !overrides.TryGetValue(path, out var role) ? null : role;
-    }
+        IReadOnlyDictionary<string, TextureRole>? overrides, string path) => overrides is null || overrides.Count == 0 ? null : !overrides.TryGetValue(path, out var role) ? null : role;
 
     /// <summary>去掉空白项并按完整路径去重（大小写按平台语义），保持输入顺序。</summary>
     private static List<string> NormalizeInput(IEnumerable<string> paths)
@@ -345,15 +317,9 @@ public static class TextureAssigner
 
     private static string? NullIfEmpty(string value) => string.IsNullOrEmpty(value) ? null : value;
 
-    private readonly struct GroupBucket
+    private readonly struct GroupBucket(TextureSuffixMatch match)
     {
-        public GroupBucket(TextureSuffixMatch match)
-        {
-            Match = match;
-            Role = match.Role;
-        }
-
-        public TextureSuffixMatch Match { get; }
-        public TextureRole Role { get; }
+        public TextureSuffixMatch Match { get; } = match;
+        public TextureRole Role { get; } = match.Role;
     }
 }

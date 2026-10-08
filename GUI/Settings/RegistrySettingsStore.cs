@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Security;
 using System.Security.Principal;
 using GUI.Diagnostics;
@@ -73,7 +73,7 @@ public static class RegistrySettingsStore
 
     /// <summary>标量字段名；顺序与 <see cref="VmatGeneratorSettings"/> 的属性一致。</summary>
     private static readonly string[] ScalarValueNames =
-    {
+    [
         SchemaVersionValueName,
         nameof(VmatGeneratorSettings.DefaultShaderName),
         nameof(VmatGeneratorSettings.TextureRoot),
@@ -82,7 +82,7 @@ public static class RegistrySettingsStore
         nameof(VmatGeneratorSettings.AutoAssignOnDrop),
         nameof(VmatGeneratorSettings.RecurseTextureFolders),
         nameof(VmatGeneratorSettings.AdoptDroppedVmatFolderAsMaterialsRoot),
-    };
+    ];
 
     /// <summary>完整路径的显示形式，仅用于日志与诊断报告。</summary>
     public const string DisplayPath = @"HKEY_CURRENT_USER\" + KeyPath;
@@ -123,7 +123,7 @@ public static class RegistrySettingsStore
             ErrorLog.Error("读取配置", KeyPath, ex);
             report = new SettingsLoadReport(
                 SettingsLoadOutcome.Defaulted, loadedFromDisk: false, errorMessage: ex.Message,
-                backupFilePath: null, repairedFields: Array.Empty<string>());
+                backupFilePath: null, repairedFields: []);
             return VmatGeneratorSettings.CreateDefault();
         }
     }
@@ -175,8 +175,7 @@ public static class RegistrySettingsStore
     // ── 原生值的读写 ───────────────────────────────────────────────────────
 
     /// <summary>旧版「整份 JSON 单值」是否还在。</summary>
-    private static bool HasLegacyBlob(RegistryKey key) =>
-        key.GetValue(LegacyBlobValueName) is string legacy && !string.IsNullOrWhiteSpace(legacy);
+    private static bool HasLegacyBlob(RegistryKey key) => key.GetValue(LegacyBlobValueName) is string legacy && !string.IsNullOrWhiteSpace(legacy);
 
     /// <summary>配置项里是否存在任一原生字段；全都不存在才当作「还没保存过」。</summary>
     private static bool HasNativeValues(RegistryKey key)
@@ -292,7 +291,7 @@ public static class RegistrySettingsStore
                     bad.Add($"{RulesKeyName}\\{name}\\{RuleRoleValue}");
                 }
 
-                var enabled = ruleKey.GetValue(RuleEnabledValue) is int flag && flag is 0 or 1 ? flag == 1 : true;
+                var enabled = ruleKey.GetValue(RuleEnabledValue) is not int flag || flag is not 0 and not 1 || flag == 1;
                 rules.Add(new TextureSuffixRule(suffix, role, enabled));
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or SecurityException)
@@ -403,8 +402,8 @@ public static class RegistrySettingsStore
         SettingsLoadOutcome.Defaulted
             => "未找到已保存的配置，已使用默认设置。",
         _ => report.LoadedFromDisk
-            ? "设置已加载。"
-            : "已从旧版配置文件迁移设置。",
+                        ? "设置已加载。"
+                        : "已从旧版配置文件迁移设置。",
     };
 
     // ── 旧版迁移 ───────────────────────────────────────────────────────────
@@ -417,7 +416,7 @@ public static class RegistrySettingsStore
         {
             report = new SettingsLoadReport(
                 SettingsLoadOutcome.Defaulted, loadedFromDisk: false, errorMessage: null,
-                backupFilePath: null, repairedFields: Array.Empty<string>());
+                backupFilePath: null, repairedFields: []);
             return VmatGeneratorSettings.CreateDefault();
         }
 
@@ -429,7 +428,7 @@ public static class RegistrySettingsStore
                 loadedFromDisk: true,
                 errorMessage: error,
                 backupFilePath: BackUpValue(json),
-                repairedFields: Array.Empty<string>());
+                repairedFields: []);
             return VmatGeneratorSettings.CreateDefault();
         }
 
@@ -449,7 +448,7 @@ public static class RegistrySettingsStore
         {
             report = new SettingsLoadReport(
                 SettingsLoadOutcome.Defaulted, loadedFromDisk: false, errorMessage: null,
-                backupFilePath: null, repairedFields: Array.Empty<string>());
+                backupFilePath: null, repairedFields: []);
             return VmatGeneratorSettings.CreateDefault();
         }
 

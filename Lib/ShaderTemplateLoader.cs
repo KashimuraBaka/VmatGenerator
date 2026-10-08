@@ -119,7 +119,7 @@ internal static class TemplateParser
         {
             // 默认值是 [..] 常量向量的按「贴图或向量」双形态处理（GUI 提供切换），
             // 其余贴图键（含空默认值）默认按纯贴图路径编辑。
-            var shape = value.TrimStart().StartsWith("[", StringComparison.Ordinal)
+            var shape = value.TrimStart().StartsWith('[')
                 ? ShaderValueShape.TextureOrVector
                 : ShaderValueShape.Texture;
             return new ShaderParamTemplate(key, key, ShaderParamKind.Texture, value) { Shape = shape };
@@ -141,8 +141,7 @@ internal static class TemplateParser
     };
 
     /// <summary>兼容「根即 Layer0」与「根包一层」两种解析形态；目录校验也复用此入口。</summary>
-    internal static VmatNode? FindLayer(VmatNode root) =>
-        root is { IsContainer: true, Key: "Layer0" }
+    internal static VmatNode? FindLayer(VmatNode root) => root is { IsContainer: true, Key: "Layer0" }
             ? root
             : root.Children.FirstOrDefault(c => c.IsContainer && c.Key == "Layer0");
 }

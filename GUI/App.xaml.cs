@@ -8,15 +8,15 @@ namespace GUI;
 
 /// <summary>
 /// Application entry point. The .NET 10 built-in Fluent theme is switched on by
-/// the <c>ThemeMode="System"</c> attribute in <see cref="App.xaml"/>; here we
+/// the <c>ThemeMode="System"</c> attribute in <c>App.xaml</c>; here we
 /// expose the shared picker fallback directory and — critically — install the
 /// global exception handlers that stop a failing control from killing the application.
 ///
 /// 防闪退策略（对应 issues「点击控件报错直接闪退」）：
 /// <list type="bullet">
-/// <item><see cref="DispatcherUnhandledException"/> —— UI 线程未处理异常。
+/// <item><see cref="System.Windows.Application.DispatcherUnhandledException"/> —— UI 线程未处理异常。
 /// 记日志 + <c>e.Handled = true</c> 标记已处理，进程不再退出。</item>
-/// <item><see cref="AppDomain.CurrentDomain.UnhandledException"/> —— 非 UI 线程的
+/// <item><see cref="System.AppDomain.UnhandledException"/> —— 非 UI 线程的
 /// 致命异常，无法恢复，但至少落盘。</item>
 /// <item><see cref="TaskScheduler.UnobservedTaskException"/> —— 未观察的 Task 异常，
 /// 标记为已观察，避免进程在 GC 时被终止。</item>
@@ -111,8 +111,7 @@ public partial class App : Application
     /// <summary>
     /// 把错误提示到状态栏（不阻塞）。MainWindow 订阅 <see cref="ErrorLog.EntryLogged"/> 实现。
     /// </summary>
-    public static string BuildErrorBanner(int errorCount) =>
-        errorCount > 0
+    public static string BuildErrorBanner(int errorCount) => errorCount > 0
             ? $"⚠ 已拦截 {errorCount} 个错误，详情见「帮助 → 错误日志」。"
             : string.Empty;
 

@@ -20,10 +20,7 @@ public sealed class TextureSuffixRule
     /// 无参构造函数，供 <c>System.Text.Json</c> 反序列化与手工构造使用；
     /// <see cref="Suffix"/> 初始化为空串（而非 <c>null</c>），保证匹配器不会遇到空引用。
     /// </summary>
-    public TextureSuffixRule()
-    {
-        Suffix = string.Empty;
-    }
+    public TextureSuffixRule() => Suffix = string.Empty;
 
     /// <summary>
     /// 用显式三元组构造一条启用状态的规则。

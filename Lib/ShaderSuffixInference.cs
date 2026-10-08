@@ -1,4 +1,4 @@
-namespace Lib;
+﻿namespace Lib;
 
 /// <summary>
 /// 一个着色器上被推断出的「语义槽位 → 候选后缀」清单。不可变值对象。
@@ -26,8 +26,7 @@ public sealed class InferredSuffixSet(
     public IReadOnlyList<string> Candidates { get; } = candidates;
 
     /// <summary>调试用摘要。</summary>
-    public override string ToString() =>
-        $"{RoleDisplay}({ParameterKey}) ← {string.Join(" ", Candidates)}";
+    public override string ToString() => $"{RoleDisplay}({ParameterKey}) ← {string.Join(" ", Candidates)}";
 }
 
 /// <summary>
@@ -60,7 +59,7 @@ public static class ShaderSuffixInference
     /// </returns>
     public static IReadOnlyList<InferredSuffixSet> Infer(ShaderTemplate? shader)
     {
-        if (shader is null) return Array.Empty<InferredSuffixSet>();
+        if (shader is null) return [];
 
         var result = new List<InferredSuffixSet>();
         foreach (var role in TextureRoleTokens.AllRoles)
@@ -116,30 +115,30 @@ public static class ShaderSuffixInference
     {
         // _null 是 Valve 体系里基础色的固定写法，与 _normal / _tran 配套使用。
         TextureRole.Color => new[] { "_null", "_col" },
-        TextureRole.Normal => new[] { "_normal", "_n" },
-        TextureRole.Translucency => new[] { "_tran", "_trans" },
-        TextureRole.Roughness => new[] { "_rough" },
-        TextureRole.Metalness => new[] { "_metal" },
-        TextureRole.AmbientOcclusion => new[] { "_ao" },
-        TextureRole.Height => new[] { "_height" },
-        TextureRole.Detail => new[] { "_detail" },
-        TextureRole.DetailMask => new[] { "_detailmask" },
-        TextureRole.Emissive => new[] { "_emissive", "_selfillum" },
-        TextureRole.Mask => new[] { "_mask" },
-        TextureRole.FoamMask => new[] { "_foam" },
-        TextureRole.FoamNormal => new[] { "_foamnormal" },
-        TextureRole.WavesMask => new[] { "_waves" },
-        TextureRole.WavesNormal => new[] { "_wavesnormal" },
-        TextureRole.WavesHeight => new[] { "_wavesheight" },
-        TextureRole.DebrisColor => new[] { "_debris" },
-        TextureRole.DebrisNormal => new[] { "_debrisnormal" },
-        TextureRole.DebrisHeight => new[] { "_debrisheight" },
-        TextureRole.TintMask => new[] { "_tintmask" },
-        TextureRole.SelfIllumMask => new[] { "_selfillummask" },
-        TextureRole.RimMask => new[] { "_rimmask" },
-        TextureRole.CubeMap => new[] { "_cube" },
-        TextureRole.LowEndCubeMap => new[] { "_lowendcubemap" },
-        TextureRole.Lightmap => new[] { "_lightmap" },
-        _ => Array.Empty<string>(),
+        TextureRole.Normal => ["_normal", "_n"],
+        TextureRole.Translucency => ["_tran", "_trans"],
+        TextureRole.Roughness => ["_rough"],
+        TextureRole.Metalness => ["_metal"],
+        TextureRole.AmbientOcclusion => ["_ao"],
+        TextureRole.Height => ["_height"],
+        TextureRole.Detail => ["_detail"],
+        TextureRole.DetailMask => ["_detailmask"],
+        TextureRole.Emissive => ["_emissive", "_selfillum"],
+        TextureRole.Mask => ["_mask"],
+        TextureRole.FoamMask => ["_foam"],
+        TextureRole.FoamNormal => ["_foamnormal"],
+        TextureRole.WavesMask => ["_waves"],
+        TextureRole.WavesNormal => ["_wavesnormal"],
+        TextureRole.WavesHeight => ["_wavesheight"],
+        TextureRole.DebrisColor => ["_debris"],
+        TextureRole.DebrisNormal => ["_debrisnormal"],
+        TextureRole.DebrisHeight => ["_debrisheight"],
+        TextureRole.TintMask => ["_tintmask"],
+        TextureRole.SelfIllumMask => ["_selfillummask"],
+        TextureRole.RimMask => ["_rimmask"],
+        TextureRole.CubeMap => ["_cube"],
+        TextureRole.LowEndCubeMap => ["_lowendcubemap"],
+        TextureRole.Lightmap => ["_lightmap"],
+        _ => [],
     };
 }

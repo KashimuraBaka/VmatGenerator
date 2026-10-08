@@ -1,15 +1,11 @@
 using System.Collections.ObjectModel;
-using System.ComponentModel;
 using System.IO;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using GUI.Diagnostics;
 using GUI.Imaging;
 using Lib;
-using Microsoft.Win32;
 
 namespace GUI.ViewModels;
 
@@ -144,6 +140,8 @@ public sealed partial class MainViewModel
                 TryAutoScan();
                 break;
             case 2 when IsStep2Ready: StepIndex = 3; break;
+            default:
+                break;
         }
     }
 
@@ -206,37 +204,33 @@ public sealed partial class MainViewModel
 
     /// <summary>第一步的目录选择：资产文件夹（扫描来源）。</summary>
     [RelayCommand]
-    public void BrowseAssets() =>
-        ControlErrorRecorder.Guard("选择资产文件夹", this, () =>
-        {
-            var picked = FolderPicker.Pick("选择资产文件夹（贴图来源）", AssetsRoot);
-            if (picked is not null) AssetsRoot = picked;
-        });
+    public void BrowseAssets() => ControlErrorRecorder.Guard("选择资产文件夹", this, () =>
+                                       {
+                                           var picked = FolderPicker.Pick("选择资产文件夹（贴图来源）", AssetsRoot);
+                                           if (picked is not null) AssetsRoot = picked;
+                                       });
 
     /// <summary>第一步的目录选择：项目文件夹（.vmat 输出）。</summary>
     [RelayCommand]
-    public void BrowseProject() =>
-        ControlErrorRecorder.Guard("选择项目文件夹", this, () =>
-        {
-            var picked = FolderPicker.Pick("选择项目文件夹（.vmat 输出位置）", ProjectRoot);
-            if (picked is not null) ProjectRoot = picked;
-        });
+    public void BrowseProject() => ControlErrorRecorder.Guard("选择项目文件夹", this, () =>
+                                        {
+                                            var picked = FolderPicker.Pick("选择项目文件夹（.vmat 输出位置）", ProjectRoot);
+                                            if (picked is not null) ProjectRoot = picked;
+                                        });
 
     /// <summary>扫描资产文件夹，填充第二步列表。</summary>
     [RelayCommand]
-    public void Scan() =>
-        ControlErrorRecorder.Guard("扫描资产文件夹", this, ScanCore);
+    public void Scan() => ControlErrorRecorder.Guard("扫描资产文件夹", this, ScanCore);
 
     /// <summary>
     /// 按用户补充的后缀重新扫描。
     /// </summary>
     /// <remarks>
-    /// 与「扫描」是同一条路径，区别只有规则表：这里把 <see cref="ExtraSuffixes"/>
+    /// 与「扫描」是同一条路径，区别只有规则表：这里把 <see cref="InferredSuffixes"/>
     /// 临时追加到规则末尾，让本次扫描生效且<b>不落盘</b>。
     /// </remarks>
     [RelayCommand]
-    public void Rescan() =>
-        ControlErrorRecorder.Guard("按后缀重新扫描", this, ScanCore);
+    public void Rescan() => ControlErrorRecorder.Guard("按后缀重新扫描", this, ScanCore);
 
     /// <summary>把扫描列表里 <see cref="ScanRowViewModel.GroupNameOverride"/> 的手动指定全部还原。</summary>
     [RelayCommand]
@@ -398,12 +392,10 @@ public sealed partial class MainViewModel
 
         return best;
     }
-    private void OnRowGroupChanged()
-    {
+    private void OnRowGroupChanged() =>
         // 材质名候选现在只取决于各行所在文件夹里的 .vmat 文件（扫描时算好），
         // 改槽位、改归属、勾选都不会让它变，无需在这里重枚举。
         RefreshMaterialPreview();
-    }
 
     /// <summary>
     /// 重算材质名下拉候选：每一行的候选 = <b>该行贴图所在文件夹下实际存在的 .vmat 文件</b>。
@@ -464,8 +456,8 @@ public sealed partial class MainViewModel
                 .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
                 .ToList();
         }
-        catch (IOException) { return Array.Empty<string>(); }
-        catch (UnauthorizedAccessException) { return Array.Empty<string>(); }
+        catch (IOException) { return []; }
+        catch (UnauthorizedAccessException) { return []; }
     }
 
     /// <summary>
@@ -621,16 +613,15 @@ public sealed partial class MainViewModel
     /// 向导以「扫一个目录」为单位工作，没有「一堆零散文件」的概念，
     /// 因此拖入文件时自动取其父目录；用户仍可在第一步手动改。
     /// </remarks>
-    public void AddDroppedPaths(IEnumerable<string> paths) =>
-        ControlErrorRecorder.Guard("拖入资产文件夹", this, () =>
-        {
-            foreach (var raw in paths)
-            {
-                if (string.IsNullOrWhiteSpace(raw)) continue;
-                var dir = Directory.Exists(raw) ? raw : Path.GetDirectoryName(Path.GetFullPath(raw));
-                if (!string.IsNullOrEmpty(dir) && Directory.Exists(dir)) { AssetsRoot = dir; break; }
-            }
-        });
+    public void AddDroppedPaths(IEnumerable<string> paths) => ControlErrorRecorder.Guard("拖入资产文件夹", this, () =>
+                                                                   {
+                                                                       foreach (var raw in paths)
+                                                                       {
+                                                                           if (string.IsNullOrWhiteSpace(raw)) continue;
+                                                                           var dir = Directory.Exists(raw) ? raw : Path.GetDirectoryName(Path.GetFullPath(raw));
+                                                                           if (!string.IsNullOrEmpty(dir) && Directory.Exists(dir)) { AssetsRoot = dir; break; }
+                                                                       }
+                                                                   });
 
     // ─── 第二步：预览 ─────────────────────────────────────────────────────
 
@@ -674,7 +665,7 @@ public sealed partial class MainViewModel
 
         SelectedPreview = ControlErrorRecorder.Guard(
             "预览材质文本", this,
-            () => VmatBuildService.Preview(shader, files, BuildEffectiveRules(), AssetsRoot, ProjectRoot,
+            () => VmatBuildService.Preview(shader, files, BuildEffectiveRules(), AssetsRoot,
                 BuildRoleOverrides()),
             fallback: "（预览失败，详见错误日志）");
     }
@@ -719,8 +710,8 @@ public sealed partial class MainViewModel
             var overrides = BuildRoleOverrides();
             var result = await Task.Run(
                 () => VmatBuildService.BuildByGroup(shader, plan, BuildEffectiveRules(),
-                    AssetsRoot, ProjectRoot, progress, _buildCts.Token, overwriteExisting: true,
-                    roleOverrides: overrides),
+                    AssetsRoot, ProjectRoot, progress, overwriteExisting: true,
+                    roleOverrides: overrides, cancellationToken: _buildCts.Token),
                 _buildCts.Token).ConfigureAwait(true);
 
             BuildSummary = Describe(result);
@@ -795,8 +786,11 @@ public sealed partial class MainViewModel
         if (result.SkippedImageCopies.Count > 0)
             sb.Append($"　贴图已存在、未覆盖 {result.SkippedImageCopies.Count} 张。");
         if (result.MissingBaseColorGroups.Count > 0)
+        {
             sb.Append($"　没有 basecolor 而整体跳过 {result.MissingBaseColorGroups.Count} 个材质："
                 + $"{string.Join("、", result.MissingBaseColorGroups.Take(5))}");
+        }
+
         if (result.UnassignedFiles.Count > 0)
             sb.Append($"　未写入 {result.UnassignedFiles.Count} 个。");
         return sb.ToString();

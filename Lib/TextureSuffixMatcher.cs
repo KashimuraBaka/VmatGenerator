@@ -4,62 +4,51 @@ namespace Lib;
 /// 单个文件的后缀匹配结果（规格 §6.3 / §6.4）。不可变值对象，由
 /// <see cref="TextureSuffixMatcher"/> 产出。
 /// </summary>
-public sealed class TextureSuffixMatch
+/// <remarks>构造匹配结果。</remarks>
+/// <param name="filePath">原始传入的文件路径（不做任何改写）。</param>
+/// <param name="fileNameWithoutExtension">不带扩展名的文件名，用于冲突裁决的第三判据。</param>
+/// <param name="normalizedName">归一化后的词干，例如 <c>concrete_wall_n</c>。</param>
+/// <param name="role">命中的语义槽位。</param>
+/// <param name="matchedSuffix">命中的规则后缀（<b>归一化后</b>的形式，例如 <c>normal</c>）。</param>
+/// <param name="matchedSuffixLength">归一化后缀长度，§6.4 / §6.5 的首要裁定键。</param>
+/// <param name="isWholeNameMatch">是否为「整名相等」命中（优先于尾部边界命中）。</param>
+public sealed class TextureSuffixMatch(
+    string filePath,
+    string fileNameWithoutExtension,
+    string normalizedName,
+    TextureRole role,
+    string matchedSuffix,
+    int matchedSuffixLength,
+    bool isWholeNameMatch)
 {
-    /// <summary>构造匹配结果。</summary>
-    /// <param name="filePath">原始传入的文件路径（不做任何改写）。</param>
-    /// <param name="fileNameWithoutExtension">不带扩展名的文件名，用于冲突裁决的第三判据。</param>
-    /// <param name="normalizedName">归一化后的词干，例如 <c>concrete_wall_n</c>。</param>
-    /// <param name="role">命中的语义槽位。</param>
-    /// <param name="matchedSuffix">命中的规则后缀（<b>归一化后</b>的形式，例如 <c>normal</c>）。</param>
-    /// <param name="matchedSuffixLength">归一化后缀长度，§6.4 / §6.5 的首要裁定键。</param>
-    /// <param name="isWholeNameMatch">是否为「整名相等」命中（优先于尾部边界命中）。</param>
-    public TextureSuffixMatch(
-        string filePath,
-        string fileNameWithoutExtension,
-        string normalizedName,
-        TextureRole role,
-        string matchedSuffix,
-        int matchedSuffixLength,
-        bool isWholeNameMatch)
-    {
-        FilePath = filePath;
-        FileNameWithoutExtension = fileNameWithoutExtension;
-        NormalizedName = normalizedName;
-        Role = role;
-        MatchedSuffix = matchedSuffix;
-        MatchedSuffixLength = matchedSuffixLength;
-        IsWholeNameMatch = isWholeNameMatch;
-    }
 
     /// <summary>原始传入的文件路径。</summary>
-    public string FilePath { get; }
+    public string FilePath { get; } = filePath;
 
     /// <summary>不带扩展名的文件名，例如 <c>brick_normal.png</c> → <c>brick_normal</c>。</summary>
-    public string FileNameWithoutExtension { get; }
+    public string FileNameWithoutExtension { get; } = fileNameWithoutExtension;
 
     /// <summary>归一化词干，例如 <c>Concrete-Wall _N.png</c> → <c>concrete_wall_n</c>。</summary>
-    public string NormalizedName { get; }
+    public string NormalizedName { get; } = normalizedName;
 
     /// <summary>命中的语义槽位。</summary>
-    public TextureRole Role { get; }
+    public TextureRole Role { get; } = role;
 
     /// <summary>命中的规则后缀（归一化形式，不含前导下划线）。</summary>
-    public string MatchedSuffix { get; }
+    public string MatchedSuffix { get; } = matchedSuffix;
 
     /// <summary>归一化后缀长度；最长者胜（§6.4 第 1 判据）。</summary>
-    public int MatchedSuffixLength { get; }
+    public int MatchedSuffixLength { get; } = matchedSuffixLength;
 
     /// <summary>
     /// <c>true</c> 表示整个词干等于规则后缀（如 <c>normal.png</c> 命中规则 <c>normal</c>）；
     /// <c>false</c> 表示「下划线边界处的后缀匹配」（如 <c>wall_normal.png</c>）。
     /// </summary>
-    public bool IsWholeNameMatch { get; }
+    public bool IsWholeNameMatch { get; } = isWholeNameMatch;
 
     /// <summary>调试用摘要。</summary>
     /// <returns>人可读的一行描述。</returns>
-    public override string ToString() =>
-        $"{FileNameWithoutExtension} → {Role}（{(IsWholeNameMatch ? "整名" : "边界")}命中「{MatchedSuffix}」）";
+    public override string ToString() => $"{FileNameWithoutExtension} → {Role}（{(IsWholeNameMatch ? "整名" : "边界")}命中「{MatchedSuffix}」）";
 }
 
 /// <summary>
@@ -168,7 +157,7 @@ public sealed class TextureSuffixMatcher
     /// <returns>全部命中项，顺序与输入一致。</returns>
     public IReadOnlyList<TextureSuffixMatch> MatchAll(IEnumerable<string> filePaths)
     {
-        if (filePaths is null) return Array.Empty<TextureSuffixMatch>();
+        if (filePaths is null) return [];
         var results = new List<TextureSuffixMatch>();
         foreach (var path in filePaths)
         {
@@ -251,19 +240,11 @@ public sealed class TextureSuffixMatcher
         }
     }
 
-    private readonly struct RuleEntry
+    private readonly struct RuleEntry(string normalizedSuffix, TextureRole role, bool enabled, int originalIndex)
     {
-        public RuleEntry(string normalizedSuffix, TextureRole role, bool enabled, int originalIndex)
-        {
-            NormalizedSuffix = normalizedSuffix;
-            Role = role;
-            Enabled = enabled;
-            OriginalIndex = originalIndex;
-        }
-
-        public string NormalizedSuffix { get; }
-        public TextureRole Role { get; }
-        public bool Enabled { get; }
-        public int OriginalIndex { get; }
+        public string NormalizedSuffix { get; } = normalizedSuffix;
+        public TextureRole Role { get; } = role;
+        public bool Enabled { get; } = enabled;
+        public int OriginalIndex { get; } = originalIndex;
     }
 }

@@ -47,8 +47,10 @@ public static class VmatNodeExtensions
     {
         yield return node;
         foreach (var child in node.Children)
+        {
             foreach (var desc in child.Flatten())
                 yield return desc;
+        }
     }
 
     /// <inheritdoc/>
@@ -135,12 +137,8 @@ public static class VmatNodeExtensions
     }
 
     /// <inheritdoc/>
-    public static void RemoveChild(this VmatNode node, string key)
-    {
-        node.Children.RemoveAll(c => string.Equals(c.Key, key, StringComparison.Ordinal));
-    }
+    public static void RemoveChild(this VmatNode node, string key) => node.Children.RemoveAll(c => string.Equals(c.Key, key, StringComparison.Ordinal));
 
     /// <inheritdoc/>
-    public static VmatNode FirstContainer(this VmatNode node) =>
-        node.Children.FirstOrDefault(c => c.IsContainer) ?? node;
+    public static VmatNode FirstContainer(this VmatNode node) => node.Children.FirstOrDefault(c => c.IsContainer) ?? node;
 }

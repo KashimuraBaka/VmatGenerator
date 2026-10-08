@@ -12,24 +12,18 @@ namespace Lib;
 ///   ├── "Compiled Textures" { "g_tColor" -> "...vtex", ... }
 ///   └── "SystemAttributes" { "PhysicsSurfaceProperties" -> "plaster" }
 /// </summary>
-public sealed class VmatDocument
+/// <inheritdoc/>
+public sealed class VmatDocument(string filePath, VmatNode root)
 {
-    /// <inheritdoc/>
-    public VmatDocument(string filePath, VmatNode root)
-    {
-        FilePath = filePath;
-        Root = root;
-        ShaderName = root.Children
-            .FirstOrDefault(c => string.Equals(c.Key, "shader", StringComparison.Ordinal))?.Value
-            ?? string.Empty;
-    }
 
     /// <inheritdoc/>
-    public string FilePath { get; }
+    public string FilePath { get; } = filePath;
     /// <inheritdoc/>
-    public VmatNode Root { get; }
+    public VmatNode Root { get; } = root;
     /// <inheritdoc/>
-    public string ShaderName { get; }
+    public string ShaderName { get; } = root.Children
+            .FirstOrDefault(c => string.Equals(c.Key, "shader", StringComparison.Ordinal))?.Value
+            ?? string.Empty;
 
     /// <inheritdoc/>
     public string DisplayName => string.IsNullOrEmpty(FilePath) ? "(new)" : Path.GetFileName(FilePath);

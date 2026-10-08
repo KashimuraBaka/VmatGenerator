@@ -155,7 +155,7 @@ public static class ShaderCatalog
         {
             var raw = layer.FindChild(flag)?.Value
                       ?? throw new InvalidOperationException($"{resourceName}: flag {flag} 无法解析出厂值。");
-            if (raw != "0" && raw != "1")
+            if (raw is not "0" and not "1")
                 throw new InvalidOperationException($"{resourceName}: flag {flag} 出厂值应为 0 或 1，实际为 {raw}。");
         }
 
@@ -182,8 +182,7 @@ public static class ShaderCatalog
 
     // ---- 标注字典构造辅助 ----
 
-    private static Dictionary<string, string> Map(params (string Key, string Value)[] items) =>
-        items.ToDictionary(i => i.Key, i => i.Value, StringComparer.Ordinal);
+    private static Dictionary<string, string> Map(params (string Key, string Value)[] items) => items.ToDictionary(i => i.Key, i => i.Value, StringComparer.Ordinal);
 
     /// <summary>展示性中文标签的公共词条（跨模板复用；各模板再叠加专属词条）。</summary>
     private static readonly (string Key, string Value)[] SharedLabels =

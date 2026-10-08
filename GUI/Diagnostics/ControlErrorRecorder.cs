@@ -184,7 +184,7 @@ public static class ControlErrorRecorder
         {
             // 注意 MenuItem 继承自 HeaderedContentControl，必须放在更具体的
             // ContentControl 分支之前或用独立分支，否则模式会被前一个 arm 吞掉。
-            string? text = fe switch
+            var text = fe switch
             {
                 ContentControl cc when cc.Content is not null => cc.Content.ToString(),
                 HeaderedContentControl hcc => hcc.Header?.ToString(),

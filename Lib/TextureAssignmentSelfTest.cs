@@ -43,8 +43,7 @@ public sealed class SelfCheckReport(IReadOnlyList<SelfCheckCase> cases)
 
     /// <summary>渲染逐条结果。</summary>
     /// <returns>多行文本。</returns>
-    public string Describe() =>
-        string.Join(Environment.NewLine, Cases.Select(c => c.ToString()))
+    public string Describe() => string.Join(Environment.NewLine, Cases.Select(c => c.ToString()))
         + Environment.NewLine
         + $"合计 {PassedCount}/{TotalCount} 通过{(Passed ? "。" : "，存在失败用例。")}";
 
@@ -151,12 +150,9 @@ public static class TextureAssignmentSelfTest
     }
 
     /// <summary>断言相等；成功返回 <c>null</c>，失败返回描述。</summary>
-    private static string? Eq<T>(T expected, T actual, string what) =>
-        EqualityComparer<T>.Default.Equals(expected, actual) ? null : $"{what}：期望 {expected}，实际 {actual}";
+    private static string? Eq<T>(T expected, T actual, string what) => EqualityComparer<T>.Default.Equals(expected, actual) ? null : $"{what}：期望 {expected}，实际 {actual}";
 
     private static string? NotNull(object? value, string what) => value is null ? $"{what}：不应为 null" : null;
-
-    private static string? IsTrue(bool condition, string what) => condition ? null : what;
 
     private static string? Combine(params string?[] parts)
     {
@@ -166,15 +162,12 @@ public static class TextureAssignmentSelfTest
 
     // ── 纯算法用例 ──────────────────────────────────────────────────────────
 
-    private static string? CaseNormalizeName()
-    {
-        return Combine(
+    private static string? CaseNormalizeName() => Combine(
             Eq("concrete_wall_n", TextureSuffixMatcher.NormalizeName("Concrete-Wall _N.png"), "§11-1 示例"),
             Eq("ambient_occlusion", TextureSuffixMatcher.NormalizeName("_Ambient Occlusion"), "§6.2 示例"),
             Eq("normal", TextureSuffixMatcher.NormalizeName("_Normal.png"), "规则后缀同样归一化"),
             Eq("wall_wall", TextureSuffixMatcher.NormalizeName("WALL__WALL.png"), "连续下划线折叠 + 大小写"),
             Eq(string.Empty, TextureSuffixMatcher.NormalizeName(""), "空串输入"));
-    }
 
     private static string? CaseDeriveChannel()
     {
@@ -724,7 +717,7 @@ public static class TextureAssignmentSelfTest
             [
                 Path.Combine(sandbox.TextureRoot, "wall", "a.png"),
                 Path.Combine(sandbox.TextureRoot, "wall", "b.png"),
-            ]))!, "公共父目录"),
+            ])), "公共父目录"),
             Eq(true, TexturePathRules.IsTextureFile("x.PNG"), "扩展名大小写不敏感"),
             Eq(false, TexturePathRules.IsTextureFile("x.vmat"), ".vmat 不是贴图"),
             // §11-8：GUI 的上下移动按钮改的是 Rules 的顺序（即 JSON 数组下标）。
@@ -791,7 +784,7 @@ public static class TextureAssignmentSelfTest
     {
         var result = TextureAssigner.Assign(
             Require("csgo_environment.vfx"),
-            new[] { Path.Combine(sandbox.TextureRoot, "normal.png") },
+            [Path.Combine(sandbox.TextureRoot, "normal.png")],
             VmatGeneratorSettings.CreateDefault().Rules,
             sandbox.TextureRoot);
         return Combine(
@@ -826,7 +819,7 @@ public static class TextureAssignmentSelfTest
         var bFile = Path.Combine(sandbox.TextureRoot, "wall", "b_normal.png");
         var result = TextureAssigner.Assign(
             Require("csgo_environment.vfx"),
-            new[] { aFile, bFile },
+            [aFile, bFile],
             VmatGeneratorSettings.CreateDefault().Rules,
             sandbox.TextureRoot);
         var conflict = result.Conflicts.Count > 0 ? result.Conflicts[0] : null;
@@ -874,7 +867,7 @@ public static class TextureAssignmentSelfTest
     {
         var result = TextureAssigner.Assign(
             Require("csgo_water_fancy.vfx"),
-            new[] { Path.Combine(sandbox.TextureRoot, "water", "waves_normal.png") },
+            [Path.Combine(sandbox.TextureRoot, "water", "waves_normal.png")],
             VmatGeneratorSettings.CreateDefault().Rules,
             sandbox.TextureRoot);
 
@@ -893,7 +886,7 @@ public static class TextureAssignmentSelfTest
         var outside = Path.Combine(sandbox.Outside, "wall_normal.png");
         var result = TextureAssigner.Assign(
             Require("csgo_environment.vfx"),
-            new[] { outside },
+            [outside],
             VmatGeneratorSettings.CreateDefault().Rules,
             sandbox.TextureRoot);
         return Combine(
@@ -906,7 +899,7 @@ public static class TextureAssignmentSelfTest
         var logo = Path.Combine(sandbox.TextureRoot, "ui", "logo.png");
         var result = TextureAssigner.Assign(
             Require("csgo_environment.vfx"),
-            new[] { logo },
+            [logo],
             VmatGeneratorSettings.CreateDefault().Rules,
             sandbox.TextureRoot);
         return Combine(
@@ -935,7 +928,7 @@ public static class TextureAssignmentSelfTest
         var noRule = Path.Combine(sandbox.TextureRoot, "ui", "logo.png");
         var result = TextureAssigner.Assign(
             Require("csgo_water_fancy.vfx"),
-            new[] { ambiguous, noRule },
+            [ambiguous, noRule],
             VmatGeneratorSettings.CreateDefault().Rules,
             sandbox.TextureRoot);
 
@@ -977,7 +970,7 @@ public static class TextureAssignmentSelfTest
         var bannerMask = Path.Combine(sandbox.TextureRoot, "fx", "banner_mask.png");
         var result = TextureAssigner.Assign(
             Require("csgo_effects.vfx"),
-            new[] { fxMask, bannerMask },
+            [fxMask, bannerMask],
             VmatGeneratorSettings.CreateDefault().Rules,
             sandbox.TextureRoot);
         return Combine(
@@ -1030,7 +1023,7 @@ public static class TextureAssignmentSelfTest
         var dir = Path.Combine(sandbox.Settings, "zero-byte");
         Directory.CreateDirectory(dir);
         var path = Path.Combine(dir, "settings.json");
-        File.WriteAllBytes(path, Array.Empty<byte>());
+        File.WriteAllBytes(path, []);
 
         var settings = VmatGeneratorSettingsStore.LoadFromFile(path, out var report);
         return Combine(
@@ -1044,7 +1037,7 @@ public static class TextureAssignmentSelfTest
         var dir = Path.Combine(sandbox.Settings, "invalid");
         Directory.CreateDirectory(dir);
         var path = Path.Combine(dir, "settings.json");
-        File.WriteAllText(path, """
+        File.WriteAllText(path, /*lang=json,strict*/ """
         {
           "schemaVersion": 99,
           "defaultShaderName": "no_such_shader.vfx",
@@ -1107,7 +1100,7 @@ public static class TextureAssignmentSelfTest
         var dir = Path.Combine(sandbox.Settings, "empty-rules");
         Directory.CreateDirectory(dir);
         var path = Path.Combine(dir, "settings.json");
-        File.WriteAllText(path, """{ "rules": [] }""");
+        File.WriteAllText(path, /*lang=json,strict*/ """{ "rules": [] }""");
 
         var settings = VmatGeneratorSettingsStore.LoadFromFile(path, out var report);
         return Combine(
@@ -1172,21 +1165,21 @@ public static class TextureAssignmentSelfTest
         var topTexture = Path.Combine(tex, "wall_normal.png");
         var deepTexture = Path.Combine(tex, "sub", "wall_diffuse.png");
         var readme = Path.Combine(drop, "readme.txt");
-        File.WriteAllBytes(vmat1, Array.Empty<byte>());
-        File.WriteAllBytes(vmat2, Array.Empty<byte>());
-        File.WriteAllBytes(topTexture, Array.Empty<byte>());
-        File.WriteAllBytes(deepTexture, Array.Empty<byte>());
+        File.WriteAllBytes(vmat1, []);
+        File.WriteAllBytes(vmat2, []);
+        File.WriteAllBytes(topTexture, []);
+        File.WriteAllBytes(deepTexture, []);
         File.WriteAllText(readme, "not importable");
 
         var svc = new DropImportService(new MaterialScanner(), recurseTextureFolders: true);
 
-        var m1 = svc.Analyze(new[] { mats });
-        var m2 = svc.Analyze(new[] { tex });
-        var m3 = svc.Analyze(new[] { vmat1 });
-        var m4 = svc.Analyze(new[] { topTexture });
-        var m5 = svc.Analyze(new[] { vmat1, topTexture });
-        var m6 = svc.Analyze(new[] { readme });
-        var m7 = svc.Analyze(Array.Empty<string>());
+        var m1 = svc.Analyze([mats]);
+        var m2 = svc.Analyze([tex]);
+        var m3 = svc.Analyze([vmat1]);
+        var m4 = svc.Analyze([topTexture]);
+        var m5 = svc.Analyze([vmat1, topTexture]);
+        var m6 = svc.Analyze([readme]);
+        var m7 = svc.Analyze([]);
 
         return Combine(
             // D1 材质文件夹
@@ -1236,15 +1229,15 @@ public static class TextureAssignmentSelfTest
         var tex = Path.Combine(drop, "textures");
         Directory.CreateDirectory(Path.Combine(mats, "sub"));
         Directory.CreateDirectory(Path.Combine(tex, "sub"));
-        File.WriteAllBytes(Path.Combine(mats, "sub", "a.vmat"), Array.Empty<byte>());
+        File.WriteAllBytes(Path.Combine(mats, "sub", "a.vmat"), []);
         var topTexture = Path.Combine(tex, "wall_normal.png");
-        File.WriteAllBytes(topTexture, Array.Empty<byte>());
-        File.WriteAllBytes(Path.Combine(tex, "sub", "wall_diffuse.png"), Array.Empty<byte>());
+        File.WriteAllBytes(topTexture, []);
+        File.WriteAllBytes(Path.Combine(tex, "sub", "wall_diffuse.png"), []);
 
         var svc = new DropImportService(new MaterialScanner(), recurseTextureFolders: false);
 
-        var texResult = svc.Analyze(new[] { tex });
-        var matResult = svc.Analyze(new[] { mats });
+        var texResult = svc.Analyze([tex]);
+        var matResult = svc.Analyze([mats]);
 
         return Combine(
             Eq(DropCategory.TextureOnlyFolder, texResult.Category, "关闭递归时贴图文件夹仍应判为 TextureOnlyFolder"),
@@ -1347,15 +1340,12 @@ public static class TextureAssignmentSelfTest
 
     // ── 沙箱与辅助 ──────────────────────────────────────────────────────────
 
-    private static ShaderTemplate Require(string shaderName) =>
-        ShaderCatalog.Find(shaderName)
+    private static ShaderTemplate Require(string shaderName) => ShaderCatalog.Find(shaderName)
         ?? throw new InvalidOperationException($"着色器 {shaderName} 不在 ShaderCatalog 中");
 
-    private static string? ValueOf(TextureAssignResult result, TextureRole role) =>
-        result.Assignments.FirstOrDefault(a => a.Role == role)?.VmatPath;
+    private static string? ValueOf(TextureAssignResult result, TextureRole role) => result.Assignments.FirstOrDefault(a => a.Role == role)?.VmatPath;
 
-    private static string? KeyOf(TextureAssignResult result, TextureRole role) =>
-        result.Assignments.FirstOrDefault(a => a.Role == role)?.ParameterKey;
+    private static string? KeyOf(TextureAssignResult result, TextureRole role) => result.Assignments.FirstOrDefault(a => a.Role == role)?.ParameterKey;
 
     private static Sandbox CreateSandbox()
     {

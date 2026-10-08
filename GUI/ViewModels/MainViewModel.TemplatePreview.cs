@@ -26,17 +26,16 @@ public sealed partial class MainViewModel
     /// <see cref="ControlErrorRecorder"/> 记录并回落到占位文案，
     /// 避免单个着色器渲染失败打断整个对话框。
     /// </remarks>
-    private string BuildTemplatePreview() =>
-        ControlErrorRecorder.Guard("预览着色器模板文档", this, () =>
-        {
-            if (SelectedShader is not { } shader)
-                return "（未选择生成着色器类型）";
+    private string BuildTemplatePreview() => ControlErrorRecorder.Guard("预览着色器模板文档", this, () =>
+                                                  {
+                                                      if (SelectedShader is not { } shader)
+                                                          return "（未选择生成着色器类型）";
 
-            var text = ShaderTemplateEmitter.EmitDefault(shader);
-            return string.IsNullOrWhiteSpace(text)
-                ? $"（{shader.ShaderName} 未生成任何内容）"
-                : AnnotateTexturePaths(shader, text);
-        }, "（生成模板文档失败，详见错误日志）");
+                                                      var text = ShaderTemplateEmitter.EmitDefault(shader);
+                                                      return string.IsNullOrWhiteSpace(text)
+                                                          ? $"（{shader.ShaderName} 未生成任何内容）"
+                                                          : AnnotateTexturePaths(shader, text);
+                                                  }, "（生成模板文档失败，详见错误日志）");
 
     /// <summary>
     /// 给贴图参数所在行加 <see cref="TexturePathPrefix"/> 前缀，其余行原样保留。

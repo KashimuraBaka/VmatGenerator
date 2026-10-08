@@ -29,15 +29,17 @@ internal static class FolderPicker
     /// <param name="title">对话框标题。</param>
     /// <param name="initialDirectory">初始目录；为空或不存在时由 Shell 自行决定。</param>
     /// <returns>用户选中的目录完整路径；取消或出错返回 <c>null</c>。</returns>
-    public static string? Pick(string title, string? initialDirectory) =>
-        PickCore(title, initialDirectory, multiselect: false).FirstOrDefault();
+    public static string? Pick(string title, string? initialDirectory)
+    {
+        var picked = PickCore(title, initialDirectory, multiselect: false);
+        return picked.Count > 0 ? picked[0] : null;
+    }
 
     /// <summary>弹出多选文件夹对话框。</summary>
     /// <param name="title">对话框标题。</param>
     /// <param name="initialDirectory">初始目录；为空或不存在时由 Shell 自行决定。</param>
     /// <returns>用户选中的目录（已去重、已归一）；取消或出错返回空列表。</returns>
-    public static IReadOnlyList<string> PickMany(string title, string? initialDirectory) =>
-        PickCore(title, initialDirectory, multiselect: true);
+    public static IReadOnlyList<string> PickMany(string title, string? initialDirectory) => PickCore(title, initialDirectory, multiselect: true);
 
     /// <summary>两种模式共用的实现：对话框一律只在用户点「选择」后返回结果。</summary>
     private static IReadOnlyList<string> PickCore(string title, string? initialDirectory, bool multiselect)
@@ -55,7 +57,7 @@ internal static class FolderPicker
 
             // 单选读 FolderName、多选读 FolderNames；两者都可能带尾部分隔符或短路径，
             // 统一交给 Normalize 归一。
-            var picked = multiselect ? dlg.FolderNames : new[] { dlg.FolderName };
+            var picked = multiselect ? dlg.FolderNames : [dlg.FolderName];
             return [.. picked
                 .Select(Normalize)
                 .Where(p => !string.IsNullOrEmpty(p))
@@ -63,7 +65,7 @@ internal static class FolderPicker
                 .Distinct(StringComparer.OrdinalIgnoreCase)];
         });
 
-        return ok && folders is not null ? folders : Array.Empty<string>();
+        return ok && folders is not null ? folders : [];
     }
 
     /// <summary>把对话框返回值归一成一个真实存在的目录。</summary>

@@ -130,8 +130,7 @@ public sealed class VmatGeneratorSettings
     /// <c>TextureAssignmentSelfTest</c> 机器化断言。</para>
     /// </summary>
     /// <returns>默认种子规则列表，全部 <c>enabled = true</c>。</returns>
-    public static IReadOnlyList<TextureSuffixRule> SeedRules() =>
-    [
+    public static IReadOnlyList<TextureSuffixRule> SeedRules() => [
         // 法线
         new("_normal", TextureRole.Normal),
         new("_n", TextureRole.Normal),
@@ -191,6 +190,5 @@ public sealed class VmatGeneratorSettings
 
     /// <summary>调试用摘要。</summary>
     /// <returns>人可读的一行描述。</returns>
-    public override string ToString() =>
-        $"v{SchemaVersion} · 默认着色器 {DefaultShaderName} · 贴图根 {TextureRoot} · 规则 {Rules.Count} 条";
+    public override string ToString() => $"v{SchemaVersion} · 默认着色器 {DefaultShaderName} · 贴图根 {TextureRoot} · 规则 {Rules.Count} 条";
 }

@@ -1,6 +1,4 @@
 using System.IO;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -30,7 +28,7 @@ public sealed partial class ScanRowViewModel : ObservableObject
         FilePath = filePath;
         MatchedSuffix = matchedSuffix;
         _role = role;
-        _groupName = groupName;
+        GroupName = groupName;
     }
 
     /// <summary>源文件完整路径。</summary>
@@ -100,12 +98,12 @@ public sealed partial class ScanRowViewModel : ObservableObject
     /// <param name="supported">当前着色器支持的槽位（<see cref="TextureRole.Unknown"/> 会被跳过）。</param>
     public void UpdateRoleOptions(IReadOnlyList<TextureRole> supported)
     {
-        _supportedRoles = supported ?? Array.Empty<TextureRole>();
+        _supportedRoles = supported ?? [];
         ReapplyRoleOptions();
     }
 
     /// <summary>最近一次算出的受支持槽位；改槽位时要据此重算候选项。</summary>
-    private IReadOnlyList<TextureRole> _supportedRoles = Array.Empty<TextureRole>();
+    private IReadOnlyList<TextureRole> _supportedRoles = [];
 
     /// <summary>
     /// 按已记住的支持范围重算候选项；组合框展开时由界面调用。
@@ -221,8 +219,6 @@ public sealed partial class ScanRowViewModel : ObservableObject
         RoleChanged?.Invoke();
     }
 
-    private string _groupName;
-
     /// <summary>
     /// 归属的 <c>.vmat</c> 名（不含扩展名）。用户可手动改。
     /// </summary>
@@ -233,7 +229,7 @@ public sealed partial class ScanRowViewModel : ObservableObject
     private string? _groupNameOverride;
 
     /// <summary>实际生效的分组名：用户指定优先，否则用扫描给出的基名。</summary>
-    public string GroupName => string.IsNullOrWhiteSpace(GroupNameOverride) ? _groupName : GroupNameOverride.Trim();
+    public string GroupName { get => string.IsNullOrWhiteSpace(GroupNameOverride) ? field : GroupNameOverride.Trim(); private set; }
 
     /// <summary>
     /// 表格里显示的<b>输出 .vmat 文件名</b>：生效分组名加 <c>.vmat</c> 扩展名。
@@ -264,7 +260,7 @@ public sealed partial class ScanRowViewModel : ObservableObject
     /// <summary>重设扫描给出的基名（重新扫描时用，会清掉用户的手动指定）。</summary>
     public void ResetGroup(string baseName)
     {
-        _groupName = baseName;
+        GroupName = baseName;
         GroupNameOverride = string.Empty;
         OnPropertyChanged(nameof(GroupName));
         OnPropertyChanged(nameof(VmatFileName));
@@ -293,13 +289,13 @@ public sealed partial class ScanRowViewModel : ObservableObject
     /// <para>由 <see cref="UpdateMaterialNames"/> 整体替换；行本身不知道全局列表，
     /// 与 <see cref="RoleOptions"/> 同一套「列表的一方推给行」的模式。</para>
     /// </remarks>
-    public IReadOnlyList<string> MaterialNameOptions { get; private set; } = Array.Empty<string>();
+    public IReadOnlyList<string> MaterialNameOptions { get; private set; } = [];
 
     /// <summary>替换材质名候选项。扫描后由 <see cref="MainViewModel"/> 按行所在文件夹调用。</summary>
     /// <param name="names">候选材质文件名（带 <c>.vmat</c> 扩展名，与列内文本同形态）。</param>
     public void UpdateMaterialNames(IReadOnlyList<string> names)
     {
-        names ??= Array.Empty<string>();
+        names ??= [];
         // 同一目录的行共享同一份列表实例；没换实例就不抛通知，避免白白重建下拉容器。
         if (ReferenceEquals(MaterialNameOptions, names)) return;
 

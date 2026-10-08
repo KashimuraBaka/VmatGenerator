@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Input;
@@ -26,7 +26,12 @@ public partial class MainWindow : Window
 
         // 非阻塞的错误角标：任何控件出错都在底栏提示，不弹模态框。
         ErrorLog.EntryLogged += OnErrorLogged;
-        Closed += (_, _) => ErrorLog.EntryLogged -= OnErrorLogged;
+        Closed += (_, _) =>
+        {
+            ErrorLog.EntryLogged -= OnErrorLogged;
+            // 唯一窗口关闭即进程退出；顺手取消并释放构建取消令牌源。
+            try { ViewModel.Dispose(); } catch { /* 退出路径上的失败不值得再记一笔 */ }
+        };
     }
 
     /// <summary>主 ViewModel（由 XAML 建立，这里只作类型化入口）。</summary>
@@ -56,7 +61,7 @@ public partial class MainWindow : Window
     /// <see cref="MouseButtonEventArgs.ClickCount"/> 自己判定。</para>
     ///
     /// <para>文件可能在扫描之后被删掉或移走，因此先确认存在再交给外壳，
-    /// 否则 <see cref="Process.Start"/> 抛出的异常只会在日志里留一行，用户什么都看不到。</para>
+    /// 否则 <see cref="Process.Start(ProcessStartInfo)"/> 抛出的异常只会在日志里留一行，用户什么都看不到。</para>
     /// </remarks>
     private void OnThumbnailMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
@@ -102,22 +107,20 @@ public partial class MainWindow : Window
     /// <see cref="DataFormats.FileDrop"/> 的存在性，不枚举内容、不调
     /// <see cref="DropImportService.CanAccept"/>——后者要碰文件系统。
     /// </remarks>
-    private void OnWindowDragOver(object sender, DragEventArgs e) =>
-        ControlErrorRecorder.Guard("拖入生成来源", this, () =>
-        {
-            e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop)
-                ? DragDropEffects.Copy
-                : DragDropEffects.None;
-            e.Handled = true;
-        });
+    private void OnWindowDragOver(object sender, DragEventArgs e) => ControlErrorRecorder.Guard("拖入生成来源", this, () =>
+                                                                          {
+                                                                              e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop)
+                                                                                  ? DragDropEffects.Copy
+                                                                                  : DragDropEffects.None;
+                                                                              e.Handled = true;
+                                                                          });
 
     /// <summary>拖拽离开窗口：清除悬停态。</summary>
-    private void OnWindowDragLeave(object sender, DragEventArgs e) =>
-        ControlErrorRecorder.Guard("拖入生成来源", this, () =>
-        {
-            e.Effects = DragDropEffects.None;
-            e.Handled = true;
-        });
+    private void OnWindowDragLeave(object sender, DragEventArgs e) => ControlErrorRecorder.Guard("拖入生成来源", this, () =>
+                                                                           {
+                                                                               e.Effects = DragDropEffects.None;
+                                                                               e.Handled = true;
+                                                                           });
 
     /// <summary>
     /// 放下：把文件 / 文件夹路径并入 <see cref="MainViewModel.AssetsRoot"/>。
@@ -127,32 +130,28 @@ public partial class MainWindow : Window
     /// 用户可能只是想换一个扫描目录，或者还没挑好着色器。
     /// 走到第三步点「开始生成」才是提交。
     /// </remarks>
-    private void OnWindowDrop(object sender, DragEventArgs e) =>
-        ControlErrorRecorder.Guard("拖入资产文件夹", this, () =>
-        {
-            if (e.Data.GetData(DataFormats.FileDrop) is string[] paths && paths.Length > 0)
-            {
-                ViewModel?.AddDroppedPaths(paths);
-                e.Effects = DragDropEffects.Copy;
-            }
-            else
-            {
-                e.Effects = DragDropEffects.None;
-            }
-            e.Handled = true;
-        });
+    private void OnWindowDrop(object sender, DragEventArgs e) => ControlErrorRecorder.Guard("拖入资产文件夹", this, () =>
+                                                                      {
+                                                                          if (e.Data.GetData(DataFormats.FileDrop) is string[] paths && paths.Length > 0)
+                                                                          {
+                                                                              ViewModel?.AddDroppedPaths(paths);
+                                                                              e.Effects = DragDropEffects.Copy;
+                                                                          }
+                                                                          else
+                                                                          {
+                                                                              e.Effects = DragDropEffects.None;
+                                                                          }
+                                                                          e.Handled = true;
+                                                                      });
 
     /// <summary>点击步骤条回到第一步。生成中不允许跳走。</summary>
-    private void OnStep1Clicked(object sender, MouseButtonEventArgs e) =>
-        ViewModel?.GoToStep1Command.Execute(null);
+    private void OnStep1Clicked(object sender, MouseButtonEventArgs e) => ViewModel?.GoToStep1Command.Execute(null);
 
     /// <summary>点击步骤条跳到第二步；第一步没填齐时不放行。</summary>
-    private void OnStep2Clicked(object sender, MouseButtonEventArgs e) =>
-        ViewModel?.GoToStep2Command.Execute(null);
+    private void OnStep2Clicked(object sender, MouseButtonEventArgs e) => ViewModel?.GoToStep2Command.Execute(null);
 
     /// <summary>点击步骤条跳到第三步；前两步没满足时不放行。</summary>
-    private void OnStep3Clicked(object sender, MouseButtonEventArgs e) =>
-        ViewModel?.GoToStep3Command.Execute(null);
+    private void OnStep3Clicked(object sender, MouseButtonEventArgs e) => ViewModel?.GoToStep3Command.Execute(null);
 
 
     // ── 帮助菜单：诊断入口 ───────────────────────────────────────────────────
@@ -167,62 +166,50 @@ public partial class MainWindow : Window
     /// <b>不碰用户真实的配置</b>（注册表项
     /// <c>HKEY_CURRENT_USER\SOFTWARE\Kashimura\VmatGenerator</c>），
     /// 因此在已配置好规则的环境里点这一项也不会污染自己的配置。</para>
-    private void OnRunTextureSuffixSelfTest(object sender, RoutedEventArgs e)
-    {
-        ControlErrorRecorder.GuardWithDialog("贴图后缀自检", sender, () =>
-        {
-            var report = TextureAssignmentSelfTest.Run();
+    private void OnRunTextureSuffixSelfTest(object sender, RoutedEventArgs e) => ControlErrorRecorder.GuardWithDialog("贴图后缀自检", sender, () =>
+                                                                                      {
+                                                                                          var report = TextureAssignmentSelfTest.Run();
 
-            // 逐条结果始终留档，这样用户报 bug 时可以直接给日志文件。
-            ErrorLog.Info($"贴图后缀自检：{report.Summary()}", nameof(MainWindow));
+                                                                                          // 逐条结果始终留档，这样用户报 bug 时可以直接给日志文件。
+                                                                                          ErrorLog.Info($"贴图后缀自检：{report.Summary()}", nameof(MainWindow));
 
-            var body = report.Passed
-                ? report.Summary()
-                  + "\n\n全部用例通过。本机设置未被改动（自检在临时目录中运行）。"
-                  + $"\n\n逐条结果已写入：\n{ErrorLog.LogFilePath}"
-                : report.Summary() + "\n\n" + report.Describe()
-                  + $"\n\n逐条结果已写入：\n{ErrorLog.LogFilePath}";
+                                                                                          var body = report.Passed
+                                                                                              ? report.Summary()
+                                                                                                + "\n\n全部用例通过。本机设置未被改动（自检在临时目录中运行）。"
+                                                                                                + $"\n\n逐条结果已写入：\n{ErrorLog.LogFilePath}"
+                                                                                              : report.Summary() + "\n\n" + report.Describe()
+                                                                                                + $"\n\n逐条结果已写入：\n{ErrorLog.LogFilePath}";
 
-            MessageBox.Show(
-                body,
-                report.Passed ? "贴图后缀自检：全部通过" : "贴图后缀自检：存在失败用例",
-                MessageBoxButton.OK,
-                report.Passed ? MessageBoxImage.Information : MessageBoxImage.Warning);
-        });
-    }
+                                                                                          MessageBox.Show(
+                                                                                              body,
+                                                                                              report.Passed ? "贴图后缀自检：全部通过" : "贴图后缀自检：存在失败用例",
+                                                                                              MessageBoxButton.OK,
+                                                                                              report.Passed ? MessageBoxImage.Information : MessageBoxImage.Warning);
+                                                                                      });
 
     /// <summary>帮助 → 打开错误日志（底栏错误角标同样走这里）。</summary>
-    private void OnShowErrorLogClicked(object sender, RoutedEventArgs e)
-    {
-        ControlErrorRecorder.GuardWithDialog("打开错误日志窗口", sender,
+    private void OnShowErrorLogClicked(object sender, RoutedEventArgs e) => ControlErrorRecorder.GuardWithDialog("打开错误日志窗口", sender,
             () => new ErrorLogWindow { Owner = this }.ShowDialog());
-    }
 
     /// <summary>帮助 → 打开日志文件所在目录。</summary>
-    private void OnOpenLogFolderClicked(object sender, RoutedEventArgs e)
-    {
-        ControlErrorRecorder.GuardWithDialog("打开日志目录", sender, () =>
-        {
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = ErrorLog.LogDirectory,
-                UseShellExecute = true,
-            });
-        });
-    }
+    private void OnOpenLogFolderClicked(object sender, RoutedEventArgs e) => ControlErrorRecorder.GuardWithDialog("打开日志目录", sender, () =>
+                                                                                  {
+                                                                                      Process.Start(new ProcessStartInfo
+                                                                                      {
+                                                                                          FileName = ErrorLog.LogDirectory,
+                                                                                          UseShellExecute = true,
+                                                                                      });
+                                                                                  });
 
     /// <summary>帮助 → 关于。</summary>
-    private void OnAboutClicked(object sender, RoutedEventArgs e)
-    {
-        ControlErrorRecorder.GuardWithDialog("显示关于对话框", sender, () =>
-            MessageBox.Show(
-                "VMAT 生成器 — 基于 WPF / .NET 10 Fluent UI 的 Source 2 贴图→.vmat 快速导航生成器。\n\n" +
-                "由 Lib + CommunityToolkit.Mvvm 构建，\n" +
-                "解析采用 ValveKeyValue 三方库，单文件 framework-dependent 发布。\n" +
-                "界面主题使用 .NET 10 Desktop Runtime 内置的 Fluent 资源。\n\n" +
-                $"错误日志：{ErrorLog.LogFilePath}",
-                "关于 VMAT 生成器",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information));
-    }
+    private void OnAboutClicked(object sender, RoutedEventArgs e) => ControlErrorRecorder.GuardWithDialog("显示关于对话框", sender, () =>
+                                                                              MessageBox.Show(
+                                                                                  "VMAT 生成器 — 基于 WPF / .NET 10 Fluent UI 的 Source 2 贴图→.vmat 快速导航生成器。\n\n" +
+                                                                                  "由 Lib + CommunityToolkit.Mvvm 构建，\n" +
+                                                                                  "解析采用 ValveKeyValue 三方库，单文件 framework-dependent 发布。\n" +
+                                                                                  "界面主题使用 .NET 10 Desktop Runtime 内置的 Fluent 资源。\n\n" +
+                                                                                  $"错误日志：{ErrorLog.LogFilePath}",
+                                                                                  "关于 VMAT 生成器",
+                                                                                  MessageBoxButton.OK,
+                                                                                  MessageBoxImage.Information));
 }

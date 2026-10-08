@@ -18,10 +18,9 @@ public static class ShaderTemplateEmitter
     public static string EmitDefault(ShaderTemplate shader, IEnumerable<string>? enabledFeatureFlags = null)
     {
         var values = shader.BuildDefaultValueMap();
-        var generator = new VmatGenerator();
         // 「合并后的设置保持默认值」：默认不强制启用任何 flag，未列出的 flag 按模板出厂值写出。
         var enabledFlags = enabledFeatureFlags?.ToList() ?? [];
-        return generator.Render(
+        return VmatGenerator.Render(
             shader,
             values,
             enabledFeatureFlags: enabledFlags,

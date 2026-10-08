@@ -49,25 +49,18 @@ public sealed record ShaderAttribute(string Key, string Value);
 /// <summary>
 /// Declarative description of a single shader parameter.
 /// </summary>
-public sealed class ShaderParamTemplate
+/// <inheritdoc/>
+public sealed class ShaderParamTemplate(string key, string display, ShaderParamKind kind, string defaultValue = "")
 {
-    /// <inheritdoc/>
-    public ShaderParamTemplate(string key, string display, ShaderParamKind kind, string defaultValue = "")
-    {
-        Key = key;
-        Display = display;
-        Kind = kind;
-        DefaultValue = defaultValue;
-    }
 
     /// <inheritdoc/>
-    public string Key { get; }
+    public string Key { get; } = key;
     /// <inheritdoc/>
-    public string Display { get; }
+    public string Display { get; } = display;
     /// <inheritdoc/>
-    public ShaderParamKind Kind { get; }
+    public ShaderParamKind Kind { get; } = kind;
     /// <inheritdoc/>
-    public string DefaultValue { get; }
+    public string DefaultValue { get; } = defaultValue;
 
     /// <summary>
     /// Optional feature flag that gates this parameter in the editor. When <c>null</c>
@@ -86,46 +79,35 @@ public sealed class ShaderParamTemplate
 /// Declarative description of a single shader. The <see cref="ShaderName"/> is the
 /// value that ends up in the <c>"shader"</c> property of the VMAT <c>Layer0</c>.
 /// </summary>
-public sealed class ShaderTemplate
+/// <inheritdoc/>
+public sealed class ShaderTemplate(
+    string shaderName,
+    string displayName,
+    string description,
+    IReadOnlyList<ShaderParamTemplate> parameters,
+    IReadOnlyList<string> featureFlags,
+    IReadOnlyList<string>? attributeFlags = null,
+    IReadOnlyDictionary<string, string>? systemAttributeDefaults = null,
+    IReadOnlyList<string>? compiledTextureKeys = null)
 {
-    /// <inheritdoc/>
-    public ShaderTemplate(
-        string shaderName,
-        string displayName,
-        string description,
-        IReadOnlyList<ShaderParamTemplate> parameters,
-        IReadOnlyList<string> featureFlags,
-        IReadOnlyList<string>? attributeFlags = null,
-        IReadOnlyDictionary<string, string>? systemAttributeDefaults = null,
-        IReadOnlyList<string>? compiledTextureKeys = null)
-    {
-        ShaderName = shaderName;
-        DisplayName = displayName;
-        Description = description;
-        Parameters = parameters;
-        FeatureFlags = featureFlags;
-        AttributeFlags = attributeFlags ?? [];
-        SystemAttributeDefaults = systemAttributeDefaults ?? new Dictionary<string, string>();
-        CompiledTextureKeys = compiledTextureKeys ?? Array.Empty<string>();
-    }
 
     /// <inheritdoc/>
-    public string ShaderName { get; }
+    public string ShaderName { get; } = shaderName;
     /// <inheritdoc/>
-    public string DisplayName { get; }
+    public string DisplayName { get; } = displayName;
     /// <inheritdoc/>
-    public string Description { get; }
+    public string Description { get; } = description;
     /// <inheritdoc/>
-    public IReadOnlyList<ShaderParamTemplate> Parameters { get; }
+    public IReadOnlyList<ShaderParamTemplate> Parameters { get; } = parameters;
     /// <inheritdoc/>
-    public IReadOnlyList<string> FeatureFlags { get; }
+    public IReadOnlyList<string> FeatureFlags { get; } = featureFlags;
 
     /// <summary>
     /// 描述性分类标签（历史遗留的展示元数据）。<b>不再参与写出</b>：
     /// <c>Attributes</c> 块现在逐字取自模板解析结果
     /// <see cref="TemplateAttributes"/>，避免目录与模板各说各话。
     /// </summary>
-    public IReadOnlyList<string> AttributeFlags { get; init; } = [];
+    public IReadOnlyList<string> AttributeFlags { get; init; } = attributeFlags ?? [];
 
     /// <summary>内嵌模板资源基名（不带 <c>.vmat</c> / <c>.vfx</c>），默认取 shader 值去后缀。</summary>
     public string TemplateResourceName { get; init; } = string.Empty;
@@ -148,14 +130,14 @@ public sealed class ShaderTemplate
     /// shader parameters. Common keys: <c>PhysicsSurfaceProperties</c>,
     /// <c>LightMapTextureName</c>, <c>DetailTexture</c>.
     /// </summary>
-    public IReadOnlyDictionary<string, string> SystemAttributeDefaults { get; init; }
+    public IReadOnlyDictionary<string, string> SystemAttributeDefaults { get; init; } = systemAttributeDefaults ?? new Dictionary<string, string>();
 
     /// <summary>
     /// Names of the compiled-texture placeholders that should be emitted even when the
     /// user has not supplied a value. Prevents the editor from accidentally stripping
     /// the Source 2 compiler output keys.
     /// </summary>
-    public IReadOnlyList<string> CompiledTextureKeys { get; init; }
+    public IReadOnlyList<string> CompiledTextureKeys { get; init; } = compiledTextureKeys ?? [];
 
     /// <inheritdoc/>
     public override string ToString() => $"{DisplayName} ({ShaderName})";

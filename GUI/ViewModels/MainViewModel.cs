@@ -2,10 +2,8 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
 using System.Collections.ObjectModel;
-using System.Globalization;
 using System.IO;
 using System.Text;
-using System.Windows;
 using GUI.Diagnostics;
 using GUI.Settings;
 using Lib;
@@ -21,14 +19,14 @@ namespace GUI.ViewModels;
 /// <c>HKEY_CURRENT_USER\SOFTWARE\Kashimura\VmatGenerator</c>，因此重启后仍然生效。
 /// 落盘逻辑刻意不在每个键上触发 —— 否则用户敲错一个字符就会污染配置文件。
 /// </summary>
-public sealed partial class MainViewModel : ObservableObject
+public sealed partial class MainViewModel : ObservableObject, IDisposable
 {
     /// <summary>
     /// 注册表配置的直接持有者。应用现在只有这一个窗口，配置不再
     /// 经由已删除的旧主窗口转一手；<b>只有点「保存设置」才落盘</b>，
     /// 字段改动只留在这里。
     /// </summary>
-    private VmatGeneratorSettings _settings = RegistrySettingsStore.LoadOrDefault();
+    private readonly VmatGeneratorSettings _settings = RegistrySettingsStore.LoadOrDefault();
 
     private readonly List<TextureSuffixRuleViewModel> _attached = [];
 
@@ -176,7 +174,7 @@ public sealed partial class MainViewModel : ObservableObject
         if (folder is not null) TextureRoot = folder;
     }
 
-    /// <summary>把当前字段写回 <see cref="MainViewModel.Settings"/> 并落盘。</summary>
+    /// <summary>把当前字段写回 <see cref="_settings"/> 并落盘。</summary>
     [RelayCommand]
     public void SaveSettings()
     {
@@ -202,7 +200,7 @@ public sealed partial class MainViewModel : ObservableObject
     public void ReloadSettings()
     {
         var loaded = ControlErrorRecorder.Guard(
-            "重新载入配置", this, ReadSettingsFromDisk, default(VmatGeneratorSettings));
+            "重新载入配置", this, ReadSettingsFromDisk, default);
         if (loaded is null)
         {
             StatusMessage = "重新载入配置失败，已保留当前界面内容，详情见错误日志。";
@@ -266,17 +264,11 @@ public sealed partial class MainViewModel : ObservableObject
 
     /// <summary>把规则上移一位（等价于 JSON 数组下标减一，即提高优先级）。</summary>
     [RelayCommand]
-    public void MoveRuleUp(TextureSuffixRuleViewModel? rule)
-    {
-        Move(rule, -1);
-    }
+    public void MoveRuleUp(TextureSuffixRuleViewModel? rule) => Move(rule, -1);
 
     /// <summary>把规则下移一位（等价于 JSON 数组下标加一，即降低优先级）。</summary>
     [RelayCommand]
-    public void MoveRuleDown(TextureSuffixRuleViewModel? rule)
-    {
-        Move(rule, +1);
-    }
+    public void MoveRuleDown(TextureSuffixRuleViewModel? rule) => Move(rule, +1);
 
     /// <summary>选一组贴图试算：后缀 → 角色 → 档位 → 参数键 → 写入值，结果显示在预览区。</summary>
     [RelayCommand]
@@ -378,8 +370,7 @@ public sealed partial class MainViewModel : ObservableObject
         settings.AdoptDroppedVmatFolderAsMaterialsRoot = AdoptDroppedVmatFolderAsMaterialsRoot;
     }
 
-    private void ApplyRules(VmatGeneratorSettings settings) =>
-        settings.Rules = [.. Rules.Select(r => r.ToRule())];
+    private void ApplyRules(VmatGeneratorSettings settings) => settings.Rules = [.. Rules.Select(r => r.ToRule())];
 
     /// <summary>
     /// 用磁盘上读回来的对象整体覆盖主窗口的共享配置（重新载入用）。
@@ -405,7 +396,7 @@ public sealed partial class MainViewModel : ObservableObject
         try
         {
             SelectedShader =
-                ShaderCatalog.Find(settings.DefaultShaderName) ?? Shaders.FirstOrDefault();
+                ShaderCatalog.Find(settings.DefaultShaderName) ?? (Shaders.Count > 0 ? Shaders[0] : null);
             TextureRoot = settings.TextureRoot ?? string.Empty;
             AssetsRoot = settings.AssetsRoot ?? string.Empty;
             ProjectRoot = settings.ProjectRoot ?? string.Empty;
@@ -460,8 +451,7 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     /// <summary>规则被编辑后立即刷新预览，做到「所见即所得」。</summary>
-    private void OnRulePropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e) =>
-        RefreshPreview();
+    private void OnRulePropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e) => RefreshPreview();
 
     /// <summary>§8.3 预览表的「角色」列定宽（显示格）。</summary>
     private const int RoleColumnWidth = 20;
@@ -558,15 +548,9 @@ public sealed partial class MainViewModel : ObservableObject
         var width = 0;
         foreach (var ch in value)
         {
-            width += ch >= '\u1100'
-                && (ch <= '\u115F'
-                    || (ch >= '\u2E80' && ch <= '\uA4CF')
-                    || (ch >= '\uAC00' && ch <= '\uD7A3')
-                    || (ch >= '\uF900' && ch <= '\uFAFF')
-                    || (ch >= '\uFE30' && ch <= '\uFE6F')
-                    || (ch >= '\uFF00' && ch <= '\uFF60')
-                    || (ch >= '\uFFE0' && ch <= '\uFFE6'))
-                ? 2
+            width += ch is >= '\u1100'
+                and (<= '\u115F'
+                    or (>= '\u2E80' and <= '\uA4CF') or (>= '\uAC00' and <= '\uD7A3') or (>= '\uF900' and <= '\uFAFF') or (>= '\uFE30' and <= '\uFE6F') or (>= '\uFF00' and <= '\uFF60') or (>= '\uFFE0' and <= '\uFFE6')) ? 2
                 : 1;
         }
         return width;
@@ -656,5 +640,15 @@ public sealed partial class MainViewModel : ObservableObject
         return param is null
             ? "—"
             : string.IsNullOrEmpty(param.DefaultValue) ? param.Kind == ShaderParamKind.Texture ? "（无默认贴图）" : "（空）" : param.DefaultValue;
+    }
+
+    /// <summary>
+    /// 释放构建取消令牌源。窗口关闭时由宿主调用；重复调用安全。
+    /// </summary>
+    public void Dispose()
+    {
+        _buildCts?.Cancel();
+        _buildCts?.Dispose();
+        _buildCts = null;
     }
 }

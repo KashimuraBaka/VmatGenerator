@@ -93,8 +93,7 @@ public static class TexturePathRules
     /// <param name="filePath">文件路径。</param>
     /// <param name="textureRoot">贴图根目录，可为 <c>null</c> / 空。</param>
     /// <returns>写入 .vmat 的最终字符串。</returns>
-    public static string ToVmatPath(string filePath, string? textureRoot) =>
-        string.IsNullOrEmpty(filePath) ? string.Empty : TryGetRelativeVmatPath(filePath, textureRoot) ?? filePath;
+    public static string ToVmatPath(string filePath, string? textureRoot) => string.IsNullOrEmpty(filePath) ? string.Empty : TryGetRelativeVmatPath(filePath, textureRoot) ?? filePath;
 
     /// <summary>
     /// 求一组文件的公共父目录（拖入贴图文件夹、但配置里还没有贴图根目录时用作建议值）。
@@ -171,8 +170,7 @@ public static class TexturePathRules
     }
 
     /// <summary><c>..\</c> / <c>../</c> 开头即表示路径越出根目录。</summary>
-    private static bool IsOutside(string relative) =>
-        relative == ".."
+    private static bool IsOutside(string relative) => relative == ".."
         || relative.StartsWith("../", StringComparison.Ordinal)
         || relative.StartsWith("..\\", StringComparison.Ordinal);
 }
