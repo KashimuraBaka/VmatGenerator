@@ -69,7 +69,7 @@ public sealed class TextureConflict(TextureRole role, string keptFilePath, IRead
 /// <remarks>构造分配结果。</remarks>
 /// <param name="assignments">成功分配记录。</param>
 /// <param name="conflicts">同槽位冲突记录。</param>
-/// <param name="unassignedFiles">未命中任何启用规则的文件路径。</param>
+/// <param name="unassignedFiles">非贴图文件与被显式排除的文件路径。</param>
 /// <param name="unresolvedRoles">命中了规则但无法确定参数键的角色解析结果。</param>
 /// <param name="totalFiles">本次输入的文件总数。</param>
 /// <param name="suggestedTextureRoot">当传入的贴图根目录为空时建议的贴图根目录。</param>
@@ -88,7 +88,10 @@ public sealed class TextureAssignResult(
     /// <summary>同槽位冲突记录。</summary>
     public IReadOnlyList<TextureConflict> Conflicts { get; } = conflicts;
 
-    /// <summary>未命中任何启用规则（或不是贴图）的文件路径。</summary>
+    /// <summary>
+    /// 非贴图文件或被显式排除的文件路径。
+    /// 未命中后缀规则的<b>贴图</b>不再落在这里——它们默认按 Color 槽位参与分配。
+    /// </summary>
     public IReadOnlyList<string> UnassignedFiles { get; } = unassignedFiles;
 
     /// <summary>
@@ -124,7 +127,9 @@ public sealed class TextureAssignResult(
 /// <para><b>处理流水线。</b></para>
 /// <list type="number">
 ///   <item><description>逐文件过滤出贴图，并做后缀匹配（§6.3 / §6.4）；
-///   未命中规则的进入 <see cref="TextureAssignResult.UnassignedFiles"/>。</description></item>
+///   <b>未命中规则的贴图默认按 <see cref="TextureRole.Color"/> 槽位参与分配</b>
+///   （后缀长度记 0，冲突时让位给真后缀命中者）；非贴图文件进入
+///   <see cref="TextureAssignResult.UnassignedFiles"/>。</description></item>
 ///   <item><description>同一槽位多个文件时按 §6.5 的四键全序选唯一胜者，其余记入
 ///   <see cref="TextureConflict"/>；<b>冲突绝不覆盖已写入的值</b>。</description></item>
 ///   <item><description>胜者按 <see cref="TextureRoleResolver.Resolve"/> 解析出参数键；
@@ -145,7 +150,7 @@ public static class TextureAssigner
     /// <param name="shader">目标着色器模板；为 <c>null</c> 时全部命中规则的文件都会落入
     /// <see cref="TextureAssignResult.UnresolvedRoles"/>，不会产生任何分配。</param>
     /// <param name="textureFilePaths">待分配的贴图文件路径集合；允许含非贴图条目（会被忽略并计入未命中）。</param>
-    /// <param name="rules">后缀规则表；为 <c>null</c> 时所有文件都进入未命中列表。</param>
+    /// <param name="rules">后缀规则表；为 <c>null</c> 或为空时所有贴图都按默认 Color 槽位处理。</param>
     /// <param name="textureRoot">贴图根目录；为空 / 不存在时按 §6.6 原样写回绝对路径。</param>
     /// <param name="roleOverrides">
     /// 可选的<b>手动槽位覆盖</b>（完整路径 → 槽位；比较器由调用方负责，Windows 上
@@ -201,8 +206,12 @@ public static class TextureAssigner
             }
             else if (match is null || match.Role == TextureRole.Unknown)
             {
-                unassigned.Add(path);
-                continue;
+                // 未命中任何后缀规则的贴图默认按 Color 槽位参与分配：多数散图本身就是
+                // 颜色贴图，「不认识就丢弃」让用户每张都要手动点名槽位。默认条目
+                // 后缀长度记 0，与手动覆盖同一套「补位不抢位」语义：同槽位竞争时
+                // 真后缀命中者必然胜出。非贴图文件与显式排除仍进未命中列表。
+                match = new TextureSuffixMatch(path, Path.GetFileNameWithoutExtension(path),
+                    string.Empty, TextureRole.Color, string.Empty, 0, false);
             }
 
             if (!byRole.TryGetValue(match.Role, out var bucket))

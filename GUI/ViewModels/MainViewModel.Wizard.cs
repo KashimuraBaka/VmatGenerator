@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -83,6 +84,18 @@ public sealed partial class MainViewModel
     /// <summary>上一次生成的完整结果说明。</summary>
     [ObservableProperty]
     private string _buildSummary = string.Empty;
+
+    /// <summary>
+    /// 最近一次<b>成功完成</b>的生成所用的输出目录（当时的项目文件夹快照）。
+    /// 空串 = 从未成功生成过；「打开输出文件夹」按钮只认这个值。
+    /// </summary>
+    /// <remarks>存快照而不是实时 <see cref="ProjectRoot"/>：生成完又去改目录时，
+    /// 按钮指向的仍是真正写出了文件的那个文件夹。</remarks>
+    [ObservableProperty]
+    private string _lastOutputFolder = string.Empty;
+
+    /// <summary>「打开输出文件夹」是否可点：有过一次成功生成，且当前不在生成中。</summary>
+    public bool CanOpenOutputFolder => !IsGenerating && LastOutputFolder.Length > 0;
 
     // ─── 步骤导航 ─────────────────────────────────────────────────────────
 
@@ -178,6 +191,8 @@ public sealed partial class MainViewModel
         OnPropertyChanged(nameof(IsStep2Ready));
         OnPropertyChanged(nameof(CanGoPreviousStep));
         OnPropertyChanged(nameof(CanStartGenerate));
+        OnPropertyChanged(nameof(CanOpenOutputFolder));
+        OpenOutputFolderCommand.NotifyCanExecuteChanged();
         GoToStep1Command.NotifyCanExecuteChanged();
         GoToStep2Command.NotifyCanExecuteChanged();
         GoToStep3Command.NotifyCanExecuteChanged();
@@ -188,6 +203,12 @@ public sealed partial class MainViewModel
     partial void OnStepIndexChanged(int value) => NotifyStepStateChanged();
 
     partial void OnIsGeneratingChanged(bool value) => NotifyStepStateChanged();
+
+    partial void OnLastOutputFolderChanged(string value)
+    {
+        OnPropertyChanged(nameof(CanOpenOutputFolder));
+        OpenOutputFolderCommand.NotifyCanExecuteChanged();
+    }
 
     partial void OnAssetsRootChanged(string value)
     {
@@ -303,41 +324,49 @@ public sealed partial class MainViewModel
 
         // 第一遍：只做后缀匹配，不定归属。
         var matched = 0;
-        var parsed = new List<(string File, string Suffix, TextureRole Role, string BaseName, string RelativeDir)>();
+        var defaulted = 0;
+        var parsed = new List<(string File, string Suffix, TextureRole Role, string BaseName, string RelativeDir, bool Matched)>();
         foreach (var file in files)
         {
             var match = matcher.Match(file);
-            var role = match is null ? TextureRole.Unknown : match.Role;
-            if (role != TextureRole.Unknown) matched++;
+            var hit = match?.Role ?? TextureRole.Unknown;
+            // 未命中后缀规则的贴图默认按 Color 槽位处理：多数散图本身就是颜色贴图，
+            // 与其留一行「未命中」等用户逐行手改，不如先给一个大概率正确的默认值。
+            // 默认条目不带后缀（后缀长度 0），同材质里真后缀命中的 Color 贴图在
+            // §6.5 冲突裁决里必然胜出——默认是「补位」，不是「抢位」。
+            var isMatched = hit != TextureRole.Unknown;
+            var role = isMatched ? hit : TextureRole.Color;
+            if (isMatched) matched++; else defaulted++;
 
             var relativeDir = Path.GetRelativePath(AssetsRoot, Path.GetDirectoryName(file) ?? AssetsRoot);
             if (relativeDir == ".") relativeDir = string.Empty;
 
             var suffix = match?.MatchedSuffix ?? string.Empty;
-            parsed.Add((file, suffix, role, StripSuffix(Path.GetFileNameWithoutExtension(file), suffix), relativeDir));
+            parsed.Add((file, suffix, role, StripSuffix(Path.GetFileNameWithoutExtension(file), suffix), relativeDir, isMatched));
         }
 
-        // 每个目录里，TextureColor 贴图的基名就是该目录的材质名。
-        var owners = parsed.Where(p => p.Role == TextureRole.Color)
+        // 每个目录里，真命中 Color 的贴图基名才是该目录的材质名；
+        // 默认 Color 的散图没有发言权，否则任何散图都能给自己立门户。
+        var owners = parsed.Where(p => p.Matched && p.Role == TextureRole.Color)
             .GroupBy(p => p.RelativeDir, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => (IReadOnlyList<string>)[.. g.Select(p => p.BaseName)], StringComparer.OrdinalIgnoreCase);
 
-        // 第二遍：定归属。只有没命中的贴图才回退到 TextureColor 材质名——
-        // 命中的贴图基名本身就是对的（wall.png 与 wall_normal.png 归到 wall）。
+        // 第二遍：定归属。只有没命中后缀的贴图（含默认 Color 的）才回退到
+        // TextureColor 材质名——命中的贴图基名本身就是对的（wall.png 与 wall_normal.png 归到 wall）。
         var supported = GetSupportedRoles();
         foreach (var p in parsed)
         {
-            var baseName = p.Role == TextureRole.Unknown && owners.TryGetValue(p.RelativeDir, out var names)
+            var baseName = !p.Matched && owners.TryGetValue(p.RelativeDir, out var names)
                 ? PickOwner(names, p.BaseName) ?? p.BaseName
                 : p.BaseName;
 
             var row = new ScanRowViewModel(p.File, p.Suffix, p.Role, baseName)
             {
                 RelativeDirectory = p.RelativeDir,
+                MatchedByRule = p.Matched,
                 // 不管有无命中，资源默认全选：用户勾的语义是「这个文件我要带走」，
-                // 而不是「后缀规则认得它」。没命中的行带着勾等用户补槽位/补规则，
-                // 想排除谁，取消勾选即可。真正进入生成的仍然只有勾了且归好类的行
-                // （见 BuildPlan 的 IsMatched 过滤），默认全勾不会写出多余内容。
+                // 而不是「后缀规则认得它」。没命中的行默认 Color 槽位、带着勾直接参与
+                // 材质；想排除谁，取消勾选即可。
                 Include = true,
             };
             row.UpdateRoleOptions(supported);
@@ -354,8 +383,12 @@ public sealed partial class MainViewModel
         _lastScannedAssetsRoot = AssetsRoot;
 
         ScanSummary = matched == 0
-            ? $"在 {ScanRows.Count} 个图像里没有一个命中后缀规则——可在下方补充后缀后重新扫描。"
-            : $"共 {ScanRows.Count} 个图像，命中 {matched} 个，归为 {CountGroups()} 个材质。";
+            ? $"共 {ScanRows.Count} 个图像，没有一个命中后缀规则——已全部默认 Color 槽位，"
+              + $"可逐行改槽位或补充后缀后重新扫描。"
+            : defaulted == 0
+                ? $"共 {ScanRows.Count} 个图像，命中 {matched} 个，归为 {CountGroups()} 个材质。"
+                : $"共 {ScanRows.Count} 个图像，命中 {matched} 个；未命中的 {defaulted} 个默认 Color 槽位，"
+                  + $"共归为 {CountGroups()} 个材质。";
     }
 
     /// <summary>
@@ -464,9 +497,9 @@ public sealed partial class MainViewModel
     /// 收集逐文件的<b>手动槽位覆盖</b>：计划里每一行当前的槽位就是权威值。
     /// </summary>
     /// <remarks>
-    /// <b>为什么全量给而不是只给「手动改过的」。</b>行上的槽位本来就 = 自动命中值 ∪ 手动改动，
+    /// <b>为什么全量给而不是只给「手动改过的」。</b>行上的槽位本来就 = 自动命中值 ∪ 默认 Color ∪ 手动改动，
     /// 全量给让 Assign 无需区分来源，预览 / 生成与界面上看到的一致；未改过的行覆盖值
-    /// 与自动判定相同，是恒等操作。未勾选或未命中的行根本不在计划里，自然不参与。
+    /// 与自动判定相同，是恒等操作。未勾选或仍未归类的行根本不在计划里，自然不参与。
     /// 键的比较器与 <see cref="TextureAssigner"/> 的去重语义一致（Windows 大小写不敏感）。
     /// </remarks>
     private Dictionary<string, TextureRole> BuildRoleOverrides()
@@ -590,8 +623,8 @@ public sealed partial class MainViewModel
         return normalized.Length == 0 ? string.Empty : "_" + normalized;
     }
     private int CountGroups() =>
-        // 材质由「勾选且已归类」的行构成；现在扫描默认全勾，未命中的行
-        // 虽带着勾，但没槽位就还不成材质——与 BuildPlan 的过滤口径一致。
+        // 材质由「勾选且已归类」的行构成；现在扫描默认全勾且未命中的行自动默认 Color，
+        // IsMatched 基本恒真，仅用户手动取消归类（Unknown）的行被排除——与 BuildPlan 口径一致。
         ScanRows.Where(r => r.Include && r.IsMatched)
             .Select(r => r.RelativeDirectory + "\0" + r.GroupName)
             .Distinct(StringComparer.OrdinalIgnoreCase).Count();
@@ -715,6 +748,9 @@ public sealed partial class MainViewModel
                 _buildCts.Token).ConfigureAwait(true);
 
             BuildSummary = Describe(result);
+            // 快照输出目录：成功写完才记录，按钮只认「真正产出过文件的位置」，
+            // 之后就算改了项目文件夹也不会把按钮指向没写过东西的目录。
+            LastOutputFolder = ResolveCommonOutputFolder(result);
             ProgressPercent = 100;
             ProgressMessage = BuildSummary;
         }
@@ -742,6 +778,39 @@ public sealed partial class MainViewModel
     public void CancelGeneration()
     {
         if (_buildCts is { IsCancellationRequested: false }) _buildCts.Cancel();
+    }
+
+    /// <summary>
+    /// 在资源管理器里打开上一次生成的输出文件夹（按钮在生成成功后才可点）。
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanOpenOutputFolder))]
+    public void OpenOutputFolder()
+    {
+        var folder = LastOutputFolder;
+        if (folder.Length == 0) return;
+
+        ControlErrorRecorder.GuardWithDialog("打开输出文件夹", this, () =>
+        {
+            if (!Directory.Exists(folder))
+            {
+                throw new DirectoryNotFoundException(
+                    $"输出文件夹已不存在，可能在生成之后被移动或删除。\n\n{folder}");
+            }
+
+            Process.Start(new ProcessStartInfo(folder) { UseShellExecute = true });
+        });
+    }
+
+    /// <summary>
+    /// 从生成结果里取输出目录：所有写出的 .vmat 都在「项目根 + 贴图子目录」下，
+    /// 优先取项目根本身（一键直达整个输出树的顶层）；拿不到结果时退回当时的项目文件夹。
+    /// </summary>
+    private string ResolveCommonOutputFolder(VmatBuildResult result)
+    {
+        if (!string.IsNullOrWhiteSpace(ProjectRoot) && Directory.Exists(ProjectRoot))
+            return ProjectRoot;
+        var first = result.WrittenFiles.FirstOrDefault();
+        return first is null ? string.Empty : Path.GetDirectoryName(first) ?? string.Empty;
     }
 
     /// <summary>

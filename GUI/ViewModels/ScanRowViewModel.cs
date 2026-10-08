@@ -180,14 +180,22 @@ public sealed partial class ScanRowViewModel : ObservableObject
     private TextureRole _role;
 
     /// <summary>槽位的中文名 + 枚举名，便于在列表里一眼看懂且能与配置文件对上。</summary>
-    /// <remarks>中英并排的原因见 <see cref="TextureRoleTokens.DescribeBilingual"/>。</remarks>
+    /// <remarks>中英并排的原因见 <see cref="TextureRoleTokens.DescribeBilingual"/>。
+    /// 槽位为 <see cref="TextureRole.Unknown"/> 只剩一种来源：用户手动把行取消归类；
+    /// 未命中后缀规则的行由扫描侧直接默认 Color 槽位。</remarks>
     public string RoleDisplay => Role == TextureRole.Unknown ? "（未命中）" : TextureRoleTokens.DescribeBilingual(Role);
 
-    /// <summary>是否命中了可用的后缀规则。</summary>
+    /// <summary>该行是否由后缀规则真命中。未命中的行默认 Color 槽位（<see cref="Role"/>
+    /// 仍非 Unknown），所以这里不能用槽位是否 Unknown 来判定。
+    /// 「写入目标」列只画一个方向朝右的箭头（目标就是右侧的『输出的 .vmat 文件名』列，
+    /// 不在箭头旁重复写材质名）；未命中默认 Color 的行由该列的下划线触发器据此区分。</summary>
+    public bool MatchedByRule { get; init; } = true;
+
+    /// <summary>该贴图是否已归类到可用槽位（真命中或默认 Color 都为真）。</summary>
     public bool IsMatched => Role != TextureRole.Unknown;
 
     /// <summary>该贴图是否参与生成。扫描后<b>不管有无命中一律默认勾选</b>；
-    /// 取消勾选才让该贴图退出材质（未命中的行即使带着勾，也要等归好槽位才真正写入）。</summary>
+    /// 取消勾选才让该贴图退出材质。</summary>
     [ObservableProperty]
     private bool _include;
 

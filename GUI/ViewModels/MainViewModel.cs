@@ -606,17 +606,16 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         {
             var name = Path.GetFileName(file);
             var match = matcher.Match(file);
-            if (match is null || match.Role == TextureRole.Unknown)
-            {
-                sb.AppendLine($"{name} → 未命中任何后缀规则 → 不写入");
-                continue;
-            }
+            // 与扫描列表同口径：未命中后缀规则的贴图默认按 Color 槽位处理。
+            var defaulted = match is null || match.Role == TextureRole.Unknown;
+            var role = defaulted ? TextureRole.Color : match!.Role;
+            var suffix = defaulted ? "(默认 Color)" : match!.MatchedSuffix;
 
-            var res = TextureRoleResolver.Resolve(shader, match.Role);
+            var res = TextureRoleResolver.Resolve(shader, role);
             var tier = res.Tier == TextureKeyTier.None ? "—" : $"P{(int)res.Tier}";
             var key = res.IsResolved && res.ParameterKey is { Length: > 0 } k ? k : "（不写入）";
             var vmatPath = TexturePathRules.ToVmatPath(file, TextureRoot);
-            sb.AppendLine($"{name} → {match.MatchedSuffix} → {match.Role} → {tier} → {key} → {vmatPath}");
+            sb.AppendLine($"{name} → {suffix} → {role} → {tier} → {key} → {vmatPath}");
             if (!res.IsResolved)
                 sb.AppendLine($"    ↳ {TextureResolutionMessages.Describe(res)}");
         }

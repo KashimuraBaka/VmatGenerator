@@ -568,7 +568,7 @@ NormalizeName(s) =
 | 3 | 规则在 `rules` 数组中的**原始下标升序** |
 | 4 | `string.CompareOrdinal(MatchedSuffix)` 升序 |
 
-取第一条 → `TextureSuffixMatch.Role`。**全部规则均未命中** → `Role = TextureRole.Unknown`，文件进入 `UnassignedFiles`，不写入任何参数。
+取第一条 → `TextureSuffixMatch.Role`。**全部规则均未命中** → v1.x：`Role = TextureRole.Unknown`，文件进入 `UnassignedFiles`，不写入任何参数。**v2.0 起（用户裁定「未命中材质默认使用 color 槽位」）**：未命中的**贴图**默认按 `TextureRole.Color` 参与分配，合成条目 `MatchedSuffix = ""`、`MatchedSuffixLength = 0`，因而在 §6.5 冲突裁决中必然让位给真后缀命中者（补位不抢位）；`UnassignedFiles` 只剩非贴图文件与 `roleOverrides` 显式排除（`Unknown`）两类。目标着色器无 Color 可解析键时按 §5.6 `NoMatchingKey` 落 `UnresolvedRoles`（已跳过）。非贴图文件与显式排除的行为不变。
 
 ### 6.5 多贴图命中同一角色的冲突处理
 

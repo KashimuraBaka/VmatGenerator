@@ -113,7 +113,9 @@ public static class TextureAssignmentSelfTest
             Run(cases, "端到端 S6：水面着色器 foam_normal / debris 各就各位", () => CaseS6(sandbox));
             Run(cases, "端到端 S7：水面着色器 waves_normal 不写入任何参数", () => CaseS7(sandbox));
             Run(cases, "端到端 S8：贴图根之外的文件原路径写回", () => CaseS8(sandbox));
-            Run(cases, "端到端 S10：logo.png 无规则命中 → 零写入 + 未命中列表", () => CaseS10(sandbox));
+            Run(cases, "端到端 S10：logo.png 无规则命中 → 默认 Color 槽位写入", () => CaseS10(sandbox));
+            Run(cases, "默认 Color 补位不抢位：后缀长度 0 输给真 _diffuse 命中", () => CaseDefaultColorLosesToRealSuffix(sandbox));
+            Run(cases, "默认 Color 例外：显式 Unknown 排除 + 非贴图文件仍进未命中", () => CaseDefaultColorExclusions(sandbox));
             Run(cases, "§8.8 步骤 11/11b：S10 与歧义诊断同时存在时的前置状态（防 GUI 提前 return）", () => CaseS10AndAmbiguousBothPresent(sandbox));
             Run(cases, "端到端 S12：fx_mask / banner_mask 同槽位只写一项（TextureMask1）", () => CaseS12(sandbox));
             Run(cases, "配置：文件不存在 → Defaulted + 种子表", () => CaseSettingsMissing(sandbox));
@@ -903,24 +905,81 @@ public static class TextureAssignmentSelfTest
             VmatGeneratorSettings.CreateDefault().Rules,
             sandbox.TextureRoot);
         return Combine(
-            Eq(0, result.Assignments.Count, "S10 零写入"),
-            Eq(true, result.HasNoWrites, "S10 HasNoWrites"),
-            Eq(1, result.UnassignedFiles.Count, "S10 未命中数"),
-            Eq(logo, string.Join("|", result.UnassignedFiles), "S10 未命中文件"),
+            Eq(1, result.Assignments.Count, "S10 默认 Color 写入一条"),
+            Eq("TextureColor1", KeyOf(result, TextureRole.Color), "S10 默认 Color 参数键"),
+            Eq("ui/logo.png", ValueOf(result, TextureRole.Color), "S10 默认 Color 写入值"),
+            Eq(string.Empty, result.Assignments[0].MatchedSuffix, "S10 默认条目无后缀"),
+            Eq(0, result.UnassignedFiles.Count, "S10 未命中数（贴图不再落这里）"),
+            Eq(false, result.HasNoWrites, "S10 HasNoWrites"),
             Eq(0, result.Conflicts.Count, "S10 不应有冲突"));
+    }
+
+    /// <summary>
+    /// 默认 Color 的「补位不抢位」：同组里 <c>wall/concrete_wall_diffuse.png</c> 真命中
+    /// <c>_diffuse</c>（后缀长度 8），<c>ui/logo.png</c> 未命中默认 Color（后缀长度 0），
+    /// §6.5 首要判据按后缀长度降序必然让真命中者胜出，默认条目记入冲突淘汰名单。
+    /// </summary>
+    private static string? CaseDefaultColorLosesToRealSuffix(Sandbox sandbox)
+    {
+        var diffuse = Path.Combine(sandbox.TextureRoot, "wall", "concrete_wall_diffuse.png");
+        var logo = Path.Combine(sandbox.TextureRoot, "ui", "logo.png");
+        var result = TextureAssigner.Assign(
+            Require("csgo_environment.vfx"),
+            [diffuse, logo],
+            VmatGeneratorSettings.CreateDefault().Rules,
+            sandbox.TextureRoot);
+        return Combine(
+            Eq(1, result.Assignments.Count, "补位：Color 只写一项"),
+            Eq("wall/concrete_wall_diffuse.png", ValueOf(result, TextureRole.Color), "补位：真后缀命中者胜出"),
+            Eq(1, result.Conflicts.Count, "补位：冲突组数"),
+            Eq(logo, string.Join("|", result.Conflicts[0].DroppedFilePaths), "补位：默认条目被淘汰"),
+            Eq(0, result.UnassignedFiles.Count, "补位：不应有未命中"));
+    }
+
+    /// <summary>
+    /// 默认 Color 的两条例外通道不被放宽：
+    /// ① 覆盖值为 <see cref="TextureRole.Unknown"/> 的文件仍是<b>显式排除</b>，
+    /// 即使默认槽位现在是非 Unknown 也不得被兜底捞回；
+    /// ② 非贴图文件（<c>readme.txt</c>）仍进未命中列表。
+    /// </summary>
+    private static string? CaseDefaultColorExclusions(Sandbox sandbox)
+    {
+        var logo = Path.Combine(sandbox.TextureRoot, "ui", "logo.png");
+        var txt = Path.Combine(sandbox.TextureRoot, "ui", "readme.txt");
+        File.WriteAllBytes(txt, []);
+        var overrides = new Dictionary<string, TextureRole>(StringComparer.OrdinalIgnoreCase)
+        {
+            [logo] = TextureRole.Unknown,
+        };
+        var result = TextureAssigner.Assign(
+            Require("csgo_environment.vfx"),
+            [logo, txt],
+            VmatGeneratorSettings.CreateDefault().Rules,
+            sandbox.TextureRoot,
+            overrides);
+        return Combine(
+            Eq(0, result.Assignments.Count, "例外：零写入"),
+            Eq(true, result.HasNoWrites, "例外：HasNoWrites"),
+            Eq(2, result.UnassignedFiles.Count, "例外：未命中数（显式排除 + 非贴图）"),
+            Eq(logo + "|" + txt, string.Join("|", result.UnassignedFiles), "例外：未命中文件"));
     }
 
     /// <summary>
     /// §8.8 步骤 11/11b 的<b>前置状态</b>回归：一次拖拽里同时出现「未命中任何后缀规则」（S10）
     /// 与「命中规则但多候选歧义」（11b）时，分配器必须给出
-    /// <c>assigned == 0</c> 且 <c>unassigned ≥ 1</c> 且 <c>unresolved ≥ 1</c> 的状态。
+    /// <c>assigned == 0</c> 且 <c>unresolved ≥ 1</c> 的状态（歧义诊断照常在场）。
     ///
     /// <para><b>为什么这要单独锁一条。</b><c>MainViewModel.DescribeDropResult</c> 曾在此状态下
     /// <b>提前 return</b>，把 S10 基础文案当作最终文案返回，从而整段吞掉 11b 的歧义诊断——
     /// 用户看到「未匹配到任何后缀规则」，完全不知道自己拖进来的
     /// <c>water_normal.png</c> 其实还触发了另一个需要处理的问题。
-    /// GUI 侧的拼接逻辑不在 Lib 可达范围内，但这里的四项前置条件正是该提前 return 分支的
-    /// 触发开关：一旦分配器行为变化、使这四项不再同时成立，本用例即失效并报警。</para>
+    /// GUI 侧的拼接逻辑不在 Lib 可达范围内，但这里的前置条件正是该提前 return 分支的
+    /// 触发开关：一旦分配器行为变化、使这些条件不再同时成立，本用例即失效并报警。</para>
+    ///
+    /// <para><b>v2.0 行为变化。</b>未命中规则的贴图不再进 <c>UnassignedFiles</c>，
+    /// 而是默认 Color 槽位；<c>csgo_water_fancy</c> 没有 Color 可解析键，
+    /// 于是 logo.png 转为 <c>NoMatchingKey</c> 未解析角色——零写入不变，
+    /// 但「未命中 ≥ 1」这条前置条件已由「未解析 ≥ 2（Color + Normal）」取代。</para>
     /// </summary>
     private static string? CaseS10AndAmbiguousBothPresent(Sandbox sandbox)
     {
@@ -935,12 +994,16 @@ public static class TextureAssignmentSelfTest
         var unresolvedAmbiguous = result.UnresolvedRoles
             .Where(r => r.UnresolvedReason == TextureResolveFailure.AmbiguousQualified)
             .ToList();
+        var unresolvedColor = result.UnresolvedRoles
+            .Where(r => r.Role == TextureRole.Color && r.UnresolvedReason == TextureResolveFailure.NoMatchingKey)
+            .ToList();
 
         return Combine(
             Eq(0, result.Assignments.Count, "S10+11b：零写入"),
             Eq(true, result.HasNoWrites, "S10+11b：HasNoWrites"),
-            Eq(1, result.UnassignedFiles.Count, "S10+11b：未命中数（logo.png）"),
-            Eq(true, result.UnresolvedRoles.Count >= 1, "S10+11b：存在未解析角色"),
+            Eq(0, result.UnassignedFiles.Count, "S10+11b：未命中数（logo.png 已转默认 Color）"),
+            Eq(1, unresolvedColor.Count, "S10+11b：默认 Color 在无 Color 键着色器上落为未解析"),
+            Eq(true, result.UnresolvedRoles.Count >= 2, "S10+11b：未解析角色数（Color + Normal）"),
             Eq(1, unresolvedAmbiguous.Count, "S10+11b：歧义角色数"),
             // 歧义角色必须原样带上 Lib 的逐字诊断，供 GUI 无条件 ⚠ 透传。
             Eq(TextureResolveFailure.AmbiguousQualified, unresolvedAmbiguous[0].UnresolvedReason,

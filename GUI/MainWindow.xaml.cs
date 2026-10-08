@@ -1,7 +1,9 @@
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Interop;
 using GUI.Diagnostics;
 using GUI.ViewModels;
 using Lib;
@@ -32,7 +34,67 @@ public partial class MainWindow : Window
             // 唯一窗口关闭即进程退出；顺手取消并释放构建取消令牌源。
             try { ViewModel.Dispose(); } catch { /* 退出路径上的失败不值得再记一笔 */ }
         };
+
+        // 启动白闪修复：窗口句柄一建好就请求 DWM 把本窗口「隐身」（cloak），
+        // 直到 WPF 完成首帧渲染（ContentRendered）才解除。
+        // 白闪的成因是窗口已经出现在屏幕上、但 WPF 的第一帧（以及 Fluent 的
+        // Mica 背景）还没合成出来，这期间 DWM 显示的是白色初始表面。
+        // cloak 让这段时间整个窗口对合成器不可见，窗口遂「直接以最终形态出现」。
+        // 方案出自 dotnet/wpf#10513 / #5853 维护者给出的官方规避手法；
+        // cloak 失败不致命（最坏退回原有白闪），解除失败才是要防的事故，
+        // 因此只有 cloak 成功后才挂解除逻辑，且解除在 ContentRendered 必经路径上。
+        SourceInitialized += OnSourceInitializedCloakStart;
+        ContentRendered += OnContentRenderedUncloak;
     }
+
+    // ─── 启动白闪修复（DWM cloak） ────────────────────────────────────────
+
+    /// <summary>本次启动是否成功 cloak 过；只有 cloak 成功才需要（也会执行）解除。</summary>
+    private bool _cloakedForStartup;
+
+    private void OnSourceInitializedCloakStart(object? sender, EventArgs e)
+    {
+        SourceInitialized -= OnSourceInitializedCloakStart;
+        try
+        {
+            var hwnd = new WindowInteropHelper(this).Handle;
+            var cloak = 1; // 1 = 隐身，0 = 现身
+            if (DwmSetWindowAttribute(hwnd, DwmwaCloak, ref cloak, sizeof(int)) == 0)
+            {
+                _cloakedForStartup = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            // 装饰性问题：记录即可，绝不影响启动。
+            ErrorLog.Write(ErrorSeverity.Warning, "启动白闪规避（cloak）", nameof(MainWindow), ex);
+        }
+    }
+
+    private void OnContentRenderedUncloak(object? sender, EventArgs e)
+    {
+        if (!_cloakedForStartup) return;
+        _cloakedForStartup = false;
+        ContentRendered -= OnContentRenderedUncloak;
+        try
+        {
+            var hwnd = new WindowInteropHelper(this).Handle;
+            var cloak = 0;
+            DwmSetWindowAttribute(hwnd, DwmwaCloak, ref cloak, sizeof(int));
+        }
+        catch (Exception ex)
+        {
+            // 理论上到这里 hwnd 必然有效（cloak 刚成功过）；万一失败窗口会保持隐身，
+            // 记一条错误方便排查——正常路径不会走到这里。
+            ErrorLog.Write(ErrorSeverity.Error, "启动白闪规避（解除 cloak）", nameof(MainWindow), ex);
+        }
+    }
+
+    /// <summary>DWMWA_CLOAK（dwmapi.h）：13。</summary>
+    private const int DwmwaCloak = 13;
+
+    [DllImport("dwmapi.dll", PreserveSig = true)]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int attributeValue, int attributeSize);
 
     /// <summary>主 ViewModel（由 XAML 建立，这里只作类型化入口）。</summary>
     public MainViewModel ViewModel => (MainViewModel)DataContext;

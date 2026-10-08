@@ -462,7 +462,8 @@
                             <DataGridTemplateColumn Header="槽位" Width="214">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
-                                        <!-- 未命中的行显示提示文案而不是空白：空白读起来像「没加载出来」。 -->
+                                        <!-- 槽位永远有值：未命中后缀规则的行由扫描侧默认 Color，
+                                             不再有「未命中」空白态；默认来源由「写入」列的下划线箭头标出。 -->
                                         <Grid Margin="2">
                                             <!-- 候选项由 MainViewModel 按当前着色器算好推给每一行：
                                                  这个着色器没有的参数键根本不会出现在下拉框里。
@@ -509,33 +510,34 @@
                                                     </DataTemplate>
                                                 </ComboBox.ItemTemplate>
                                             </ComboBox>
-                                            <TextBlock Text="（未命中）" FontSize="12" Opacity="0.5"
-                                                       HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                       IsHitTestVisible="False">
-                                                <TextBlock.Style>
-                                                    <Style TargetType="TextBlock">
-                                                        <Setter Property="Visibility" Value="Collapsed" />
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding IsMatched}" Value="False">
-                                                                <Setter Property="Visibility" Value="Visible" />
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </TextBlock.Style>
-                                            </TextBlock>
                                         </Grid>
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>
-                            <DataGridTextColumn Header="命中后缀" Width="88" IsReadOnly="True"
-                                                Binding="{Binding MatchedSuffix}">
-                                <DataGridTextColumn.ElementStyle>
-                                    <Style TargetType="TextBlock">
-                                        <Setter Property="HorizontalAlignment" Value="Center" />
-                                        <Setter Property="VerticalAlignment" Value="Center" />
-                                    </Style>
-                                </DataGridTextColumn.ElementStyle>
-                            </DataGridTextColumn>
+                            <!-- 命中反馈列：只有一个方向朝右的箭头，读作「本行写往右侧的
+                                 『输出的 .vmat 文件名』列」——目标名就在右边格子里，箭头旁不再重复。
+                                 未命中默认 Color 的行箭头带下划线，做最轻量的区分。 -->
+                            <DataGridTemplateColumn Header="写入" Width="48" IsReadOnly="True">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="→" FontSize="16"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                   ToolTip="写入右侧『输出的 .vmat 文件名』列所示材质">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding MatchedByRule}" Value="False">
+                                                            <Setter Property="TextDecorations" Value="Underline" />
+                                                            <Setter Property="ToolTip"
+                                                                    Value="未命中后缀规则，默认 Color 槽位；写入右侧所示材质" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
                             <!-- 归属可改：同一张贴图被两个材质共用时，不必去动后缀规则。
                                  格子里写的是第三步真正写出的 .vmat 文件名（带扩展名），
                                  编辑提交时扩展名会被剥掉再存进分组名，见 VmatFileName。
@@ -681,6 +683,13 @@
                         </Style>
                     </Button.Style>
                 </Button>
+                <!-- 输出文件夹入口常驻底栏最右侧，但只在「生成完成过」之后才可点：
+                     CanOpenOutputFolder 要求存在一次成功写盘的目录快照，
+                     没生成过（或正在生成中）时按钮是灰的，点了也不会扑空。 -->
+                <Button Margin="8,0,0,0" Padding="16,5" Content="打开输出文件夹"
+                        IsEnabled="{Binding CanOpenOutputFolder}"
+                        Command="{Binding OpenOutputFolderCommand}"
+                        ToolTip="在资源管理器中打开 .vmat 的输出目录（生成完成后才可点）" />
             </StackPanel>
             <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
                 <StackPanel>
