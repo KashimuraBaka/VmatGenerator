@@ -1,0 +1,97 @@
+Layer0
+{
+	shader "csgo_vertexlitgeneric.vfx"
+
+	//---- 2-Sided Rendering ----
+	F_DONT_FLIP_BACKFACE_NORMALS 0
+	F_RENDER_BACKFACES 0
+
+	//---- Decal Texture ----
+	F_DECAL_TEXTURE 0
+
+	//---- Direct/Per-Pixel Specular - S1 $phong ----
+	F_SPECULAR_DIRECT 0
+
+	//---- Ensure 2nd UV set presnt in vertex data ----
+	F_FORCE_UV2 0
+
+	//---- Indirect/Cubemap Specular - S1 $envmap ----
+	F_SPECULAR_INDIRECT 0
+
+	//---- Per-Instance Tint Mask ----
+	F_TINT_MASK 0
+
+	//---- Prevent Tinting ----
+	F_NOTINT 0
+
+	//---- Self Illum ----
+	F_SELF_ILLUM 0
+
+	//---- Shadows ----
+	F_DO_NOT_CAST_SHADOWS 0
+
+	//---- Translucent ----
+	F_ALPHA_TEST 0
+
+	//---- Z-Buffering ----
+	F_DEPTH_BIAS 0
+	F_DISABLE_Z_BUFFERING 0
+
+	//---- Z-Prepass ----
+	F_DISABLE_Z_PREPASS 0
+
+	//---- Ambient Occlusion ----
+	g_flAmbientOcclusionScale "0.000"
+	TextureAmbientOcclusion ""
+
+	//---- Color ----
+	g_bUseSecondaryUvForTintMask "0"
+	g_flModelTintAmount "1.000"
+	g_flTexCoordRotation "0.000"
+	g_nScaleTexCoordUByModelScaleAxis "0" // None
+	g_nScaleTexCoordVByModelScaleAxis "0" // None
+	g_vColorTint "[1.000000 1.000000 1.000000 0.000000]"
+	g_vTexCoordCenter "[0.500 0.500]"
+	g_vTexCoordOffset "[0.000 0.000]"
+	g_vTexCoordScale "[1.000 1.000]"
+	g_vTexCoordScrollSpeed "[0.000 0.000]"
+	TextureColor ""
+	TextureTintMask ""
+
+	//---- Decal Texture ----
+	g_bUseSecondaryUvForDecal "1"
+	TextureDecal ""
+	TextureDecalTranslucency ""
+
+	//---- Fog ----
+	g_bFogEnabled "1"
+
+	//---- Lighting ----
+	TextureMetalness ""
+	TextureRoughness ""
+
+	//---- Normal Map ----
+	g_flNormalTexCoordRotation "0.000"
+	g_vNormalTexCoordCenter "[0.500 0.500]"
+	g_vNormalTexCoordOffset "[0.000 0.000]"
+	g_vNormalTexCoordScale "[1.000 1.000]"
+	TextureNormal ""
+
+	//---- Self Illum ----
+	g_bUseSecondaryUvForSelfIllum "0"
+	g_flSelfIllumAlbedoFactor "1.000"
+	g_flSelfIllumBrightness "0.000"
+	g_flSelfIllumScale "1.000"
+	g_vSelfIllumScrollSpeed "[0.000 0.000]"
+	g_vSelfIllumTint "[1.000000 1.000000 1.000000 0.000000]"
+	TextureSelfIllumMask ""
+
+	//---- Texture Address Mode ----
+	g_nTextureAddressModeU "0" // Wrap
+	g_nTextureAddressModeV "0" // Wrap
+
+	//---- Translucent ----
+	g_flAlphaTestReference "0.500"
+	g_flAntiAliasedEdgeStrength "1.000"
+	TextureTranslucency ""
+}

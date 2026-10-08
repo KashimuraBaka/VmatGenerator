@@ -92,7 +92,7 @@ public sealed class TextureSuffixMatcher
     /// <param name="rules">规则集合；为 <c>null</c> 时按空规则表处理（任何文件都不会命中）。</param>
     public TextureSuffixMatcher(IEnumerable<TextureSuffixRule> rules)
     {
-        var source = rules?.Where(r => r is not null).ToList() ?? new List<TextureSuffixRule>();
+        var source = rules?.Where(r => r is not null).ToList() ?? [];
         Rules = source.AsReadOnly();
         _entries = new RuleEntry[source.Count];
         for (var i = 0; i < source.Count; i++)

@@ -73,7 +73,7 @@ public sealed partial class MainViewModel
             if (t.Length > 2 && t[0] == '"')
             {
                 var end = t.IndexOf('"');
-                if (end > 1 && textureKeys.Contains(t.Substring(1, end - 1)))
+                if (end > 1 && textureKeys.Contains(t[1..end]))
                     sb.Append(TexturePathPrefix);
             }
             sb.Append(line).Append('\n');

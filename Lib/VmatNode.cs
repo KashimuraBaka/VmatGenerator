@@ -10,46 +10,54 @@ namespace Lib;
 /// </summary>
 public sealed class VmatNode
 {
+    /// <inheritdoc/>
     public VmatNode(string key)
     {
         Key = key;
     }
 
+    /// <inheritdoc/>
     public string Key { get; }
+    /// <inheritdoc/>
     public string? Value { get; set; }
-    public List<VmatNode> Children { get; } = new();
+    /// <inheritdoc/>
+    public List<VmatNode> Children { get; } = [];
 
+    /// <inheritdoc/>
     public bool IsContainer => Children.Count > 0;
 
+    /// <inheritdoc/>
     public Vector4? TryParseVector()
     {
-        if (Value is null) return null;
-        return Vector4.TryParse(Value, out var v) ? v : null;
+        return Value is null ? null : Vector4.TryParse(Value, out var v) ? v : null;
     }
 
+    /// <inheritdoc/>
     public float? TryParseFloat()
     {
-        if (Value is null) return null;
-        return float.TryParse(Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var f) ? f : null;
+        return Value is null ? null : float.TryParse(Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var f) ? f : null;
     }
 
+    /// <inheritdoc/>
     public int? TryParseInt()
     {
-        if (Value is null) return null;
-        return int.TryParse(Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var i) ? i : null;
+        return Value is null ? null : int.TryParse(Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var i) ? i : null;
     }
 
+    /// <inheritdoc/>
     public bool? TryParseBool()
     {
-        if (Value is null) return null;
-        return Value switch
-        {
-            "1" => true,
-            "0" => false,
-            _ => bool.TryParse(Value, out var b) ? b : null,
-        };
+        return Value is null
+            ? null
+            : Value switch
+            {
+                "1" => true,
+                "0" => false,
+                _ => bool.TryParse(Value, out var b) ? b : null,
+            };
     }
 
+    /// <inheritdoc/>
     public VmatNode? FindChild(string name)
     {
         foreach (var child in Children)
@@ -74,6 +82,7 @@ public sealed class VmatNode
     /// </summary>
     public string Serialize(int indentLevel = 0) => VmatFormat.Serialize(this);
 
+    /// <inheritdoc/>
     public override string ToString() => IsContainer ? $"{{{Key}, {Children.Count} children}}" : $"{Key} = {Value}";
 }
 
@@ -82,6 +91,7 @@ public sealed class VmatNode
 /// </summary>
 public readonly record struct Vector4(float X, float Y, float Z, float W)
 {
+    /// <inheritdoc/>
     public static bool TryParse(string raw, out Vector4 value)
     {
         value = default;
@@ -90,8 +100,8 @@ public readonly record struct Vector4(float X, float Y, float Z, float W)
         var inner = s[1..^1].Trim();
         var parts = inner.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length < 1) return false;
-        float x = 0, y = 0, z = 0, w = 0;
-        if (!float.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out x)) return false;
+        float y = 0, z = 0, w = 0;
+        if (!float.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out float x)) return false;
         if (parts.Length > 1 && !float.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out y)) return false;
         if (parts.Length > 2 && !float.TryParse(parts[2], NumberStyles.Float, CultureInfo.InvariantCulture, out z)) return false;
         if (parts.Length > 3 && !float.TryParse(parts[3], NumberStyles.Float, CultureInfo.InvariantCulture, out w)) return false;
@@ -101,6 +111,7 @@ public readonly record struct Vector4(float X, float Y, float Z, float W)
 
     // Source 2 convention: vectors are always emitted with 6 fixed decimals so the
     // diff with the original .vmat file is whitespace-only.
+    /// <inheritdoc/>
     public override string ToString() =>
         $"[{X.ToString("0.000000", CultureInfo.InvariantCulture)} {Y.ToString("0.000000", CultureInfo.InvariantCulture)} {Z.ToString("0.000000", CultureInfo.InvariantCulture)} {W.ToString("0.000000", CultureInfo.InvariantCulture)}]";
 }

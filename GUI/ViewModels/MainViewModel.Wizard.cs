@@ -55,7 +55,7 @@ public sealed partial class MainViewModel
     // ─── 第二步：扫描与分组 ───────────────────────────────────────────────
 
     /// <summary>扫描到的全部图像，一行一个。</summary>
-    public ObservableCollection<ScanRowViewModel> ScanRows { get; } = new();
+    public ObservableCollection<ScanRowViewModel> ScanRows { get; } = [];
 
     /// <summary>当前选中的行；其所属 .vmat 的生成结果实时显示在右侧预览。</summary>
     [ObservableProperty]
@@ -326,7 +326,7 @@ public sealed partial class MainViewModel
         // 每个目录里，TextureColor 贴图的基名就是该目录的材质名。
         var owners = parsed.Where(p => p.Role == TextureRole.Color)
             .GroupBy(p => p.RelativeDir, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(g => g.Key, g => (IReadOnlyList<string>)g.Select(p => p.BaseName).ToArray(), StringComparer.OrdinalIgnoreCase);
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<string>)[.. g.Select(p => p.BaseName)], StringComparer.OrdinalIgnoreCase);
 
         // 第二遍：定归属。只有没命中的贴图才回退到 TextureColor 材质名——
         // 命中的贴图基名本身就是对的（wall.png 与 wall_normal.png 归到 wall）。
@@ -340,7 +340,11 @@ public sealed partial class MainViewModel
             var row = new ScanRowViewModel(p.File, p.Suffix, p.Role, baseName)
             {
                 RelativeDirectory = p.RelativeDir,
-                Include = p.Role != TextureRole.Unknown,
+                // 不管有无命中，资源默认全选：用户勾的语义是「这个文件我要带走」，
+                // 而不是「后缀规则认得它」。没命中的行带着勾等用户补槽位/补规则，
+                // 想排除谁，取消勾选即可。真正进入生成的仍然只有勾了且归好类的行
+                // （见 BuildPlan 的 IsMatched 过滤），默认全勾不会写出多余内容。
+                Include = true,
             };
             row.UpdateRoleOptions(supported);
             row.GroupChanged += OnRowGroupChanged;
@@ -450,9 +454,9 @@ public sealed partial class MainViewModel
             : Path.Combine(AssetsRoot, relativeDirectory);
         try
         {
-            if (!Directory.Exists(dir)) return Array.Empty<string>();
-
-            return Directory.EnumerateFiles(dir, "*.vmat", SearchOption.TopDirectoryOnly)
+            return !Directory.Exists(dir)
+                ? Array.Empty<string>()
+                : Directory.EnumerateFiles(dir, "*.vmat", SearchOption.TopDirectoryOnly)
                 .Select(Path.GetFileName)
                 .Where(name => !string.IsNullOrEmpty(name))
                 .Select(name => name!)
@@ -485,7 +489,7 @@ public sealed partial class MainViewModel
         return overrides;
     }
 
-/// <summary>拼出本次扫描实际使用的规则表 = 规则表 + 推断出且勾选的新增后缀。</summary>
+    /// <summary>拼出本次扫描实际使用的规则表 = 规则表 + 推断出且勾选的新增后缀。</summary>
     /// <remarks>
     /// 早先这里是「把用户手填的补充后缀一律按 <see cref="TextureRole.Color"/> 处理」——
     /// 于是 <c>_normal</c>、<c>_tran</c> 全被当成颜色贴图。现在每个后缀都带着
@@ -506,7 +510,7 @@ public sealed partial class MainViewModel
         return rules;
     }
 
-// ─── 按着色器推断贴图槽位 ───────────────────────────────────────────────
+    // ─── 按着色器推断贴图槽位 ───────────────────────────────────────────────
 
     /// <summary>
     /// 当前着色器能承载的语义槽位，以及每个槽位对应的候选后缀。
@@ -514,7 +518,7 @@ public sealed partial class MainViewModel
     /// <remarks>
     /// 着色器一换就整体重算——同一个资产目录换着色器，要的贴图完全不是一回事。
     /// </remarks>
-    public ObservableCollection<InferredSuffixViewModel> InferredSuffixes { get; } = new();
+    public ObservableCollection<InferredSuffixViewModel> InferredSuffixes { get; } = [];
 
     /// <summary>推断结果的摘要文案。</summary>
     public string InferredSummary => InferredSuffixes.Count == 0
@@ -594,7 +598,11 @@ public sealed partial class MainViewModel
         return normalized.Length == 0 ? string.Empty : "_" + normalized;
     }
     private int CountGroups() =>
-        ScanRows.Where(r => r.Include).Select(r => r.GroupName).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+        // 材质由「勾选且已归类」的行构成；现在扫描默认全勾，未命中的行
+        // 虽带着勾，但没槽位就还不成材质——与 BuildPlan 的过滤口径一致。
+        ScanRows.Where(r => r.Include && r.IsMatched)
+            .Select(r => r.RelativeDirectory + "\0" + r.GroupName)
+            .Distinct(StringComparer.OrdinalIgnoreCase).Count();
 
     private static string StripSuffix(string fileNameNoExt, string matchedSuffix)
     {
@@ -647,14 +655,20 @@ public sealed partial class MainViewModel
         }
 
         var group = SelectedRow.GroupName;
+        var dir = SelectedRow.RelativeDirectory;
+        // 预览的分组口径必须与 BuildPlan 完全一致：同文件夹 + 同名才算同一份材质。
+        // 只按名字聚会把 concrete\wall 与 floor\wall 两组的贴图混进同一份预览，
+        // 看到的和第三步实际写出的就不是同一回事。
         var files = ScanRows
-            .Where(r => r.Include && string.Equals(r.GroupName, group, StringComparison.OrdinalIgnoreCase))
+            .Where(r => r.Include && r.IsMatched
+                && string.Equals(r.RelativeDirectory, dir, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(r.GroupName, group, StringComparison.OrdinalIgnoreCase))
             .Select(r => r.FilePath)
             .ToList();
 
         if (files.Count == 0)
         {
-            SelectedPreview = $"（{group} 下面还没有勾选的贴图）";
+            SelectedPreview = $"（{group} 下面还没有勾选且已归类的贴图）";
             return;
         }
 
@@ -705,7 +719,7 @@ public sealed partial class MainViewModel
             var overrides = BuildRoleOverrides();
             var result = await Task.Run(
                 () => VmatBuildService.BuildByGroup(shader, plan, BuildEffectiveRules(),
-                    AssetsRoot, ProjectRoot, progress, _buildCts.Token, overwriteExisting: false,
+                    AssetsRoot, ProjectRoot, progress, _buildCts.Token, overwriteExisting: true,
                     roleOverrides: overrides),
                 _buildCts.Token).ConfigureAwait(true);
 
@@ -740,11 +754,17 @@ public sealed partial class MainViewModel
     }
 
     /// <summary>
-    /// 把列表里勾选且命中的行，按最终分组名聚成生成计划。
+    /// 把列表里勾选且命中的行，按「<b>所在文件夹</b> + 最终分组名」聚成生成计划。
     /// </summary>
     /// <remarks>
-    /// 用户的<b>手动指定优先</b>于自动基名——同一个 <c>wall_diff.png</c> 被分到
-    /// <c>wall</c> 还是 <c>wall_b</c>，由列表那一列说了算。
+    /// <para>用户的<b>手动指定优先</b>于自动基名——同一个 <c>wall_diff.png</c> 被分到
+    /// <c>wall</c> 还是 <c>wall_b</c>，由列表那一列说了算。</para>
+    /// <para><b>计划键必须带上所在文件夹。</b>输出目录取的是组内 basecolor 贴图
+    /// 镜像出来的子目录，同名材质（<c>concrete\wall</c> 与 <c>floor\wall</c>）
+    /// 若只按名字聚合会被并成一组：所有贴图挤进第一个文件夹，其它文件夹的
+    /// <c>.vmat</c> 根本没有被写出来，槽位还会跨文件夹互相抢占。
+    /// 键用 相对目录 + <c>\0</c> + 组名 拼成（<c>\0</c> 是文件名里的非法字符，
+    /// 任何真实材质名都无法伪造出同样的键），值里仍只放贴图文件，供生成端用。</para>
     /// </remarks>
     private Dictionary<string, List<string>> BuildPlan()
     {
@@ -752,10 +772,11 @@ public sealed partial class MainViewModel
         foreach (var row in ScanRows)
         {
             if (!row.Include || !row.IsMatched) continue;
-            if (!plan.TryGetValue(row.GroupName, out var files))
+            var key = row.RelativeDirectory + "\0" + row.GroupName;
+            if (!plan.TryGetValue(key, out var files))
             {
-                files = new List<string>();
-                plan[row.GroupName] = files;
+                files = [];
+                plan[key] = files;
             }
             files.Add(row.FilePath);
         }

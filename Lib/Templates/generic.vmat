@@ -1,0 +1,91 @@
+Layer0
+{
+	shader "generic.vfx"
+
+	//---- 2-Sided Rendering ----
+	F_DONT_FLIP_BACKFACE_NORMALS 0
+	F_RENDER_BACKFACES 0
+
+	//---- Per-Instance Tint Mask ----
+	F_TINT_MASK 0
+
+	//---- Self Illum ----
+	F_SELF_ILLUM 0
+
+	//---- Specular ----
+	F_SPECULAR 0
+
+	//---- Translucent ----
+	F_ALPHA_TEST 0
+
+	//---- Color ----
+	g_vColorTint "[1.000000 1.000000 1.000000 0.000000]"
+	TextureColor "materials/default/default_color.tga"
+	TextureTintMask ""
+
+	//---- Fog ----
+	g_bFogEnabled "1"
+
+	//---- Lighting ----
+	g_vGlossinessRange "[0.000 1.000]"
+	g_vMetalnessRange "[0.000 1.000]"
+	g_vReflectanceRange "[0.000 1.000]"
+	TextureGlossiness ""
+	TextureMetalness ""
+	TextureReflectance ""
+
+	//---- Normal Map ----
+	g_flBumpStrength "1.000"
+	TextureNormal ""
+
+	//---- Self Illum ----
+	g_flSelfIllumScale "1.000"
+	g_vSelfIllumTint "[1.000000 1.000000 1.000000 0.000000]"
+	TextureSelfIllumMask ""
+
+	//---- Texture Address Mode ----
+	g_nTextureAddressModeU "0" // Wrap
+	g_nTextureAddressModeV "0" // Wrap
+
+	//---- Translucent ----
+	g_flAlphaTestReference "0.500"
+	TextureTranslucency ""
+
+	Attributes
+	{
+		mapbuilder.nodraw "1"
+		mapbuilder.playerclip "1"
+		mapbuilder.sky "1"
+		mapbuilder.visblocker "1"
+		tools.toolsmaterial "1"
+	}
+
+
+	VariableState
+	{
+		"Color"
+		{
+		}
+		"Fog"
+		{
+		}
+		"Lighting"
+		{
+			"Reflectance" 0
+			"Gloss" 0
+			"Metalness" 0
+		}
+		"Normal Map"
+		{
+		}
+		"Self Illum"
+		{
+		}
+		"Texture Address Mode"
+		{
+		}
+		"Translucent"
+		{
+		}
+	}
+}

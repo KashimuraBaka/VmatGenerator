@@ -9,24 +9,23 @@ namespace Lib;
 public static class ShaderTemplateEmitter
 {
     /// <summary>
-    /// Render a single shader to VMAT text using the template's parameter defaults and
-    /// a minimal flag set. The result is a complete Source 2 VMAT — <c>Layer0</c> with
-    /// every feature flag, every parameter, a populated <c>Compiled Textures</c> block,
-    /// and any <c>SystemAttributes</c> defaults.
+    /// Render a single shader to VMAT text using the template's parameter defaults.
+    /// The result is a complete Source 2 VMAT — <c>Layer0</c> with every feature flag
+    /// (at its template factory default unless listed in <paramref name="enabledFeatureFlags"/>),
+    /// every parameter, the template's <c>Attributes</c> block, and any
+    /// <c>SystemAttributes</c> defaults.
     /// </summary>
     public static string EmitDefault(ShaderTemplate shader, IEnumerable<string>? enabledFeatureFlags = null)
     {
         var values = shader.BuildDefaultValueMap();
         var generator = new VmatGenerator();
-        // Enable every feature flag so subgroup parameters show up in the baseline.
-        var enabledFlags = enabledFeatureFlags?.ToList() ?? shader.FeatureFlags.ToList();
+        // 「合并后的设置保持默认值」：默认不强制启用任何 flag，未列出的 flag 按模板出厂值写出。
+        var enabledFlags = enabledFeatureFlags?.ToList() ?? [];
         return generator.Render(
             shader,
             values,
             enabledFeatureFlags: enabledFlags,
-            enabledAttributeFlags: shader.AttributeFlags,
-            systemAttributeOverrides: shader.SystemAttributeDefaults.ToDictionary(kv => kv.Key, kv => kv.Value),
-            compiledTextureOverrides: shader.CompiledTextureKeys.ToDictionary(kv => kv, _ => string.Empty));
+            systemAttributeOverrides: shader.SystemAttributeDefaults.ToDictionary(kv => kv.Key, kv => kv.Value));
     }
 
     /// <summary>
@@ -39,8 +38,8 @@ public static class ShaderTemplateEmitter
         var paths = new List<string>(ShaderCatalog.All.Count);
         foreach (var shader in ShaderCatalog.All)
         {
-            var name = shader.ShaderName;
-            // Replace illegal filename characters (dots are fine; we keep them).
+            // 文件名跟模板基名走（csgo_character.vmat），与内嵌资源一一对应。
+            var name = string.IsNullOrEmpty(shader.TemplateResourceName) ? shader.ShaderName : shader.TemplateResourceName;
             var path = Path.Combine(directory, name + ".vmat");
             File.WriteAllText(path, EmitDefault(shader));
             paths.Add(path);

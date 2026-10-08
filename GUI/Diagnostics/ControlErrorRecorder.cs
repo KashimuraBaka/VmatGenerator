@@ -72,8 +72,7 @@ public static class ControlErrorRecorder
         try
         {
             var focused = Keyboard.FocusedElement;
-            if (focused is null) return "(无焦点控件)";
-            return "焦点 " + Describe(focused);
+            return focused is null ? "(无焦点控件)" : "焦点 " + Describe(focused);
         }
         catch
         {

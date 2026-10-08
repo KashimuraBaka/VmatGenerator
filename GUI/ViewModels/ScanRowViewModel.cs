@@ -188,7 +188,8 @@ public sealed partial class ScanRowViewModel : ObservableObject
     /// <summary>是否命中了可用的后缀规则。</summary>
     public bool IsMatched => Role != TextureRole.Unknown;
 
-    /// <summary>该贴图是否参与生成（未命中的默认不参与）。</summary>
+    /// <summary>该贴图是否参与生成。扫描后<b>不管有无命中一律默认勾选</b>；
+    /// 取消勾选才让该贴图退出材质（未命中的行即使带着勾，也要等归好槽位才真正写入）。</summary>
     [ObservableProperty]
     private bool _include;
 
@@ -212,9 +213,9 @@ public sealed partial class ScanRowViewModel : ObservableObject
         OnPropertyChanged(nameof(IsMatched));
         OnPropertyChanged(nameof(SelectedRoleOption));
 
-        // 从「未命中」改成具体槽位时自动勾上「生成」。
-        // 这一行当初没被选中，正是因为它没归类；用户现在明说了它属于哪个槽位，
-        // 留着不勾等于让这次修改悄无声息地失效。
+        // 归好槽位的行必须在勾选状态。「默认全勾」之下这句通常是恒等操作，
+        // 但用户先取消勾选、再改槽位时，它把取消撤销回来：用户明说了这张属于
+        // 哪个槽位，留着不勾等于让这次修改悄无声息地失效。
         if (value != TextureRole.Unknown) Include = true;
 
         RoleChanged?.Invoke();
@@ -305,7 +306,7 @@ public sealed partial class ScanRowViewModel : ObservableObject
         MaterialNameOptions = names;
         OnPropertyChanged(nameof(MaterialNameOptions));
     }
-// ─── 缩略图 ────────────────────────────────────────────────────────────
+    // ─── 缩略图 ────────────────────────────────────────────────────────────
 
     private BitmapSource? _thumbnail;
     private int _thumbnailRequested;

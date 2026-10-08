@@ -107,4 +107,19 @@ public enum TextureRole
     /// <c>csgo_water_fancy</c> 的 <c>TextureLowEndCubeMap</c>。
     /// </summary>
     LowEndCubeMap,
+
+    /// <summary>毛发遮罩（主 Token <c>HairMask</c>），对应 <c>csgo_character</c> 的 <c>TextureHairMask</c>。</summary>
+    HairMask,
+
+    /// <summary>次表面散射遮罩（主 Token <c>SssMask</c>），对应 <c>csgo_character</c> 的 <c>TextureSssMask</c>。</summary>
+    SssMask,
+
+    /// <summary>逆反射遮罩（主 Token <c>RetroReflectiveMask</c>），对应 <c>csgo_character</c> 的 <c>TextureRetroReflectiveMask</c>。</summary>
+    RetroReflectiveMask,
+
+    /// <summary>细节法线（主 Token <c>NormalDetail</c>），对应 <c>csgo_environment</c> 的 <c>TextureNormalDetail1</c>。</summary>
+    NormalDetail,
+
+    /// <summary>贴花半透明（主 Token <c>DecalTranslucency</c>），对应 <c>TextureDecalTranslucency</c>。</summary>
+    DecalTranslucency,
 }

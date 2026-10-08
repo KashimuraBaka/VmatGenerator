@@ -14,6 +14,7 @@ namespace Lib;
 /// </summary>
 public sealed class VmatDocument
 {
+    /// <inheritdoc/>
     public VmatDocument(string filePath, VmatNode root)
     {
         FilePath = filePath;
@@ -23,10 +24,14 @@ public sealed class VmatDocument
             ?? string.Empty;
     }
 
+    /// <inheritdoc/>
     public string FilePath { get; }
+    /// <inheritdoc/>
     public VmatNode Root { get; }
+    /// <inheritdoc/>
     public string ShaderName { get; }
 
+    /// <inheritdoc/>
     public string DisplayName => string.IsNullOrEmpty(FilePath) ? "(new)" : Path.GetFileName(FilePath);
 
     /// <summary>Top-level keys of <c>Layer0</c>: feature flags, parameters, sub-blocks.</summary>

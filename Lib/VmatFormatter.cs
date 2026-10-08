@@ -158,8 +158,7 @@ public static class VmatFormatter
 
     private static bool Same(KVDocument a, KVDocument b)
     {
-        if (!string.Equals(a.Name, b.Name, StringComparison.Ordinal)) return false;
-        return SameChildren(a.Root, b.Root);
+        return !string.Equals(a.Name, b.Name, StringComparison.Ordinal) ? false : SameChildren(a.Root, b.Root);
     }
 
     private static bool SameChildren(KVObject a, KVObject b)
@@ -185,10 +184,11 @@ public static class VmatFormatter
     {
         // Compare by rendered text so that "1" and 1 (which serialize identically)
         // are treated the same, while ordering and nesting still have to match.
-        if (a.ValueType != b.ValueType) return false;
-        if (a.ValueType == KVValueType.Collection) return SameChildren(a, b);
-        if (a.ValueType == KVValueType.Array) return SameArray(a, b);
-        return string.Equals(a.ToString(), b.ToString(), StringComparison.Ordinal);
+        return a.ValueType != b.ValueType
+            ? false
+            : a.ValueType == KVValueType.Collection
+                ? SameChildren(a, b)
+                : a.ValueType == KVValueType.Array ? SameArray(a, b) : string.Equals(a.ToString(), b.ToString(), StringComparison.Ordinal);
     }
 
     private static bool SameArray(KVObject a, KVObject b)

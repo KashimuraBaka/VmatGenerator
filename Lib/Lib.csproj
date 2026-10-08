@@ -6,6 +6,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <!-- IDE 风格提示（.editorconfig 里提升为 warning 的那些）参与构建报告，保证「0 警告」口径与 IDE 一致 -->
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <!-- 库是对外 API：XML 注释缺失 / 写错（CS1591、CS157x）在构建时直接报出来 -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <RootNamespace>Lib</RootNamespace>
     <AssemblyName>Lib</AssemblyName>
   </PropertyGroup>

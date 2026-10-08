@@ -129,6 +129,11 @@ public static class TextureRoleTokens
         [TextureRole.SelfIllumMask] = new(new[] { "SelfIllumMask" }, "自发光遮罩"),
         [TextureRole.RimMask] = new(new[] { "RimMask" }, "边缘光遮罩"),
         [TextureRole.LowEndCubeMap] = new(new[] { "LowEndCubeMap" }, "低端 Cube Map"),
+        [TextureRole.HairMask] = new(new[] { "HairMask" }, "毛发遮罩"),
+        [TextureRole.SssMask] = new(new[] { "SssMask" }, "次表面散射遮罩"),
+        [TextureRole.RetroReflectiveMask] = new(new[] { "RetroReflectiveMask" }, "逆反射遮罩"),
+        [TextureRole.NormalDetail] = new(new[] { "NormalDetail" }, "细节法线"),
+        [TextureRole.DecalTranslucency] = new(new[] { "DecalTranslucency" }, "贴花半透明"),
     };
 
     private sealed class RoleInfo

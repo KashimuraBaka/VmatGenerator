@@ -10,11 +10,11 @@ public static class TexturePathRules
     /// 贴图扩展名集合（§6.1，锁定）。比较一律 <see cref="StringComparison.OrdinalIgnoreCase"/>。
     /// 刻意<b>不</b>包含 <c>.vmat</c>——否则拖入材质时会被误判为贴图。
     /// </summary>
-    public static IReadOnlyList<string> TextureExtensions { get; } = new[]
-    {
+    public static IReadOnlyList<string> TextureExtensions { get; } =
+    [
         ".png", ".tga", ".jpg", ".jpeg", ".bmp", ".exr",
         ".hdr", ".pfm", ".dds", ".vtex", ".vtf", ".tif", ".tiff",
-    };
+    ];
 
     /// <summary>Windows 上路径比较不区分大小写；其余平台按序数比较。</summary>
     private static StringComparison PathComparison =>
@@ -67,11 +67,9 @@ public static class TexturePathRules
             var relative = Path.GetRelativePath(rootFull, fileFull);
 
             // 根路径本身（GetRelativePath 对同路径返回 "."）与 ".." 开头的越界路径都判为失败。
-            if (relative.Length == 0 || relative == ".") return null;
-            if (IsOutside(relative)) return null;
-            if (Path.IsPathRooted(relative)) return null;
-
-            return relative.Replace('\\', '/');
+            return relative.Length == 0 || relative == "."
+                ? null
+                : IsOutside(relative) ? null : Path.IsPathRooted(relative) ? null : relative.Replace('\\', '/');
         }
         catch (ArgumentException)
         {
@@ -95,11 +93,8 @@ public static class TexturePathRules
     /// <param name="filePath">文件路径。</param>
     /// <param name="textureRoot">贴图根目录，可为 <c>null</c> / 空。</param>
     /// <returns>写入 .vmat 的最终字符串。</returns>
-    public static string ToVmatPath(string filePath, string? textureRoot)
-    {
-        if (string.IsNullOrEmpty(filePath)) return string.Empty;
-        return TryGetRelativeVmatPath(filePath, textureRoot) ?? filePath;
-    }
+    public static string ToVmatPath(string filePath, string? textureRoot) =>
+        string.IsNullOrEmpty(filePath) ? string.Empty : TryGetRelativeVmatPath(filePath, textureRoot) ?? filePath;
 
     /// <summary>
     /// 求一组文件的公共父目录（拖入贴图文件夹、但配置里还没有贴图根目录时用作建议值）。
@@ -168,17 +163,16 @@ public static class TexturePathRules
     private static string TrimTrailingSeparators(string directory)
     {
         var trimmed = directory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        if (trimmed.Length == 0) return string.Empty;
-        if (trimmed.Length == 2 && trimmed[1] == ':') return trimmed + Path.DirectorySeparatorChar;
-        return trimmed;
+        return trimmed.Length == 0
+            ? string.Empty
+            : trimmed.Length == 2 && trimmed[1] == ':'
+            ? trimmed + Path.DirectorySeparatorChar
+            : trimmed;
     }
 
-    /// <summary><c>..\\</c> / <c>../</c> 开头即表示路径越出根目录。</summary>
-    private static bool IsOutside(string relative)
-    {
-        if (relative == "..") return true;
-        if (relative.StartsWith("..\\", StringComparison.Ordinal)) return true;
-        if (relative.StartsWith("../", StringComparison.Ordinal)) return true;
-        return false;
-    }
+    /// <summary><c>..\</c> / <c>../</c> 开头即表示路径越出根目录。</summary>
+    private static bool IsOutside(string relative) =>
+        relative == ".."
+        || relative.StartsWith("../", StringComparison.Ordinal)
+        || relative.StartsWith("..\\", StringComparison.Ordinal);
 }

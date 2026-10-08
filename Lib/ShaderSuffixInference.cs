@@ -3,9 +3,10 @@ namespace Lib;
 /// <summary>
 /// 一个着色器上被推断出的「语义槽位 → 候选后缀」清单。不可变值对象。
 /// </summary>
-/// <param name="Role">语义槽位，例如 <see cref="TextureRole.Normal"/>。</param>
-/// <param name="ParameterKey">该槽位在着色器里命中的参数键，例如 <c>TextureNormal1</c>。</param>
-/// <param name="Candidates">建议用于匹配该槽位的文件后缀，已按推荐度排序并去重。</param>
+/// <param name="role">语义槽位。</param>
+/// <param name="roleDisplay">槽位中文名。</param>
+/// <param name="parameterKey">命中的着色器参数键。</param>
+/// <param name="candidates">建议用于匹配该槽位的文件后缀，已按推荐度排序并去重。</param>
 public sealed class InferredSuffixSet(
     TextureRole role,
     string roleDisplay,

@@ -68,7 +68,7 @@ public sealed partial class InferredSuffixViewModel : ObservableObject
     /// 而不是在构造时算死。
     /// </remarks>
     public IReadOnlyList<string> Fresh =>
-        ParsedSuffixes.Where(s => !_existingSuffixes.Contains(s)).ToArray();
+        [.. ParsedSuffixes.Where(s => !_existingSuffixes.Contains(s))];
 
     /// <summary>新增后缀的个数，用于列表右侧的计数标记。</summary>
     public int FreshCount => Fresh.Count;
@@ -116,11 +116,10 @@ public sealed partial class InferredSuffixViewModel : ObservableObject
     private static IReadOnlyList<string> Parse(string? text) =>
         string.IsNullOrWhiteSpace(text)
             ? Array.Empty<string>()
-            : text.Split(Separator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            : [.. text.Split(Separator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                   .Select(TextureSuffixMatcher.NormalizeName)
                   .Where(s => s.Length > 0)
-                  .Distinct(StringComparer.Ordinal)
-                  .ToArray();
+                  .Distinct(StringComparer.Ordinal)];
 
     /// <summary>后缀文本或勾选状态变化后，刷新所有派生属性。</summary>
     private void RaiseDerived()

@@ -221,8 +221,8 @@ public sealed class TextureRoleResolution
 /// <para><b>第四步：P5 的唯一性红线。</b>本工具的产物是直接进游戏的 .vmat，
 /// 静默猜错槽位会生成「看起来正常、实则贴错」的文件，比「没填上」危险得多
 /// ——后者用户一眼看得到。因此 P5 只有在合格候选<b>恰好一个</b>时才算命中；
-/// 多个候选并列时一律判定为 <see cref="TextureUnresolvedReason.AmbiguousCandidates"/>，
-/// 不写入任何参数，并把全部候选键名放进 <see cref="TextureRoleResolution.Diagnostic"/>。
+/// 多个候选并列时一律判定为 <see cref="TextureResolveFailure.AmbiguousQualified"/>，
+/// 不写入任何参数，并把全部候选键名放进 <see cref="TextureRoleResolution.DiagnosticText"/>。
 /// 正因为拒绝在代码里猜，§5.4 才删掉了 P5 的 <c>qualifier.Length</c> 排序键：
 /// 原先「限定词最短者胜」这条规则本身是偶然的（<c>Foam</c> 4 &lt; <c>Waves</c> 5 &lt;
 /// <c>Debris</c> 6 只是碰巧），却会把普通 <c>_normal</c> 静默写进泡沫法线槽位。
@@ -311,8 +311,7 @@ public static class TextureRoleResolver
             }
         }
 
-        if (candidates.Count == 0) return Array.Empty<TextureKeyCandidate>();
-        return SortByTier(candidates, bestTier);
+        return candidates.Count == 0 ? Array.Empty<TextureKeyCandidate>() : SortByTier(candidates, bestTier);
     }
 
     /// <summary>
@@ -340,16 +339,13 @@ public static class TextureRoleResolver
         var winner = candidates[0];
 
         // P5 唯一性红线：合格候选多于一个时判定为未解析，宁可留空也不猜错槽位。
-        if (winner.Tier == TextureKeyTier.QualifiedComposite && candidates.Count > 1)
-        {
-            return TextureRoleResolution.Unresolved(
+        return winner.Tier == TextureKeyTier.QualifiedComposite && candidates.Count > 1
+            ? TextureRoleResolution.Unresolved(
                 role,
                 TextureResolveFailure.AmbiguousQualified,
                 candidates,
-                BuildDiagnosticText(role, TextureResolveFailure.AmbiguousQualified, candidates));
-        }
-
-        return TextureRoleResolution.Resolved(role, winner, candidates);
+                BuildDiagnosticText(role, TextureResolveFailure.AmbiguousQualified, candidates))
+            : TextureRoleResolution.Resolved(role, winner, candidates);
     }
 
     /// <summary>
@@ -417,8 +413,7 @@ public static class TextureRoleResolver
     /// <returns>形如 <c>_foamnormal</c> 的建议后缀。</returns>
     public static string SuggestedSuffixFor(TextureKeyCandidate candidate)
     {
-        if (candidate is null) return string.Empty;
-        return SuggestedSuffixForCore(candidate.DerivedChannel);
+        return candidate is null ? string.Empty : SuggestedSuffixForCore(candidate.DerivedChannel);
     }
 
     /// <summary>
@@ -536,9 +531,7 @@ public static class TextureRoleResolver
             if (Matches(channel, tokens[i]))
                 return TextureKeyTier.DerivedChannelEqual;
         // P5 带限定词的复合通道：前缀非空
-        if (QualifierOf(channel, tokens) is not null)
-            return TextureKeyTier.QualifiedComposite;
-        return TextureKeyTier.None;
+        return QualifierOf(channel, tokens) is not null ? TextureKeyTier.QualifiedComposite : TextureKeyTier.None;
     }
 
     /// <summary>
@@ -579,10 +572,9 @@ public static class TextureRoleResolver
             TextureKeyTier.DerivedChannelEqual => candidates.OrderBy(c => c.TrailingNumber).ThenBy(c => c.LayerNumber),
             _ => candidates.OrderBy(_ => 0),
         };
-        return ordered
+        return [.. ordered
             .ThenBy(c => c.ParameterIndex)
-            .ThenBy(c => c.ParameterKey, StringComparer.Ordinal)
-            .ToList();
+            .ThenBy(c => c.ParameterKey, StringComparer.Ordinal)];
     }
 
     private readonly struct ParsedKey

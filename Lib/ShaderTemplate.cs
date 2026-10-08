@@ -8,11 +8,17 @@ namespace Lib;
 /// </summary>
 public enum ShaderParamKind
 {
+    /// <inheritdoc/>
     Float,
+    /// <inheritdoc/>
     Int,
+    /// <inheritdoc/>
     Bool,
+    /// <inheritdoc/>
     String,
+    /// <inheritdoc/>
     Vector,
+    /// <inheritdoc/>
     Texture,
 }
 
@@ -23,17 +29,29 @@ public enum ShaderParamKind
 /// </summary>
 public enum ShaderValueShape
 {
+    /// <inheritdoc/>
     Scalar,
+    /// <inheritdoc/>
     Vector,
+    /// <inheritdoc/>
     Texture,
+    /// <inheritdoc/>
     TextureOrVector,
 }
+
+/// <summary>
+/// 模板 <c>Attributes</c> 块里的一条键值（逐字保留，写出时原样回放）。
+/// </summary>
+/// <param name="Key">属性键，如 <c>mapbuilder.nodraw</c>。</param>
+/// <param name="Value">属性值，通常是 <c>"1"</c>。</param>
+public sealed record ShaderAttribute(string Key, string Value);
 
 /// <summary>
 /// Declarative description of a single shader parameter.
 /// </summary>
 public sealed class ShaderParamTemplate
 {
+    /// <inheritdoc/>
     public ShaderParamTemplate(string key, string display, ShaderParamKind kind, string defaultValue = "")
     {
         Key = key;
@@ -42,9 +60,13 @@ public sealed class ShaderParamTemplate
         DefaultValue = defaultValue;
     }
 
+    /// <inheritdoc/>
     public string Key { get; }
+    /// <inheritdoc/>
     public string Display { get; }
+    /// <inheritdoc/>
     public ShaderParamKind Kind { get; }
+    /// <inheritdoc/>
     public string DefaultValue { get; }
 
     /// <summary>
@@ -66,13 +88,14 @@ public sealed class ShaderParamTemplate
 /// </summary>
 public sealed class ShaderTemplate
 {
+    /// <inheritdoc/>
     public ShaderTemplate(
         string shaderName,
         string displayName,
         string description,
         IReadOnlyList<ShaderParamTemplate> parameters,
         IReadOnlyList<string> featureFlags,
-        IReadOnlyList<string> attributeFlags,
+        IReadOnlyList<string>? attributeFlags = null,
         IReadOnlyDictionary<string, string>? systemAttributeDefaults = null,
         IReadOnlyList<string>? compiledTextureKeys = null)
     {
@@ -81,32 +104,60 @@ public sealed class ShaderTemplate
         Description = description;
         Parameters = parameters;
         FeatureFlags = featureFlags;
-        AttributeFlags = attributeFlags;
+        AttributeFlags = attributeFlags ?? [];
         SystemAttributeDefaults = systemAttributeDefaults ?? new Dictionary<string, string>();
         CompiledTextureKeys = compiledTextureKeys ?? Array.Empty<string>();
     }
 
+    /// <inheritdoc/>
     public string ShaderName { get; }
+    /// <inheritdoc/>
     public string DisplayName { get; }
+    /// <inheritdoc/>
     public string Description { get; }
+    /// <inheritdoc/>
     public IReadOnlyList<ShaderParamTemplate> Parameters { get; }
+    /// <inheritdoc/>
     public IReadOnlyList<string> FeatureFlags { get; }
-    public IReadOnlyList<string> AttributeFlags { get; }
+
+    /// <summary>
+    /// 描述性分类标签（历史遗留的展示元数据）。<b>不再参与写出</b>：
+    /// <c>Attributes</c> 块现在逐字取自模板解析结果
+    /// <see cref="TemplateAttributes"/>，避免目录与模板各说各话。
+    /// </summary>
+    public IReadOnlyList<string> AttributeFlags { get; init; } = [];
+
+    /// <summary>内嵌模板资源基名（不带 <c>.vmat</c> / <c>.vfx</c>），默认取 shader 值去后缀。</summary>
+    public string TemplateResourceName { get; init; } = string.Empty;
+
+    /// <summary>
+    /// 每个 feature flag 在模板里的出厂值（<c>"0"</c> 或 <c>"1"</c>）。
+    /// 生成时未显式启用的 flag 按该值写出——「合并后的设置保持默认值」这条
+    /// 合并规则的落点；模板没给的 flag 出厂视为 <c>"0"</c>。
+    /// </summary>
+    public IReadOnlyDictionary<string, string> FeatureFlagDefaults { get; init; } = new Dictionary<string, string>();
+
+    /// <summary>
+    /// 模板 <c>Attributes</c> 块的原样内容（键与值都逐字保留）。
+    /// 生成时按序原样写出；为空时不写该块。
+    /// </summary>
+    public IReadOnlyList<ShaderAttribute> TemplateAttributes { get; init; } = [];
 
     /// <summary>
     /// Default values for the <c>SystemAttributes</c> sub-block emitted alongside the
     /// shader parameters. Common keys: <c>PhysicsSurfaceProperties</c>,
     /// <c>LightMapTextureName</c>, <c>DetailTexture</c>.
     /// </summary>
-    public IReadOnlyDictionary<string, string> SystemAttributeDefaults { get; }
+    public IReadOnlyDictionary<string, string> SystemAttributeDefaults { get; init; }
 
     /// <summary>
     /// Names of the compiled-texture placeholders that should be emitted even when the
     /// user has not supplied a value. Prevents the editor from accidentally stripping
     /// the Source 2 compiler output keys.
     /// </summary>
-    public IReadOnlyList<string> CompiledTextureKeys { get; }
+    public IReadOnlyList<string> CompiledTextureKeys { get; init; }
 
+    /// <inheritdoc/>
     public override string ToString() => $"{DisplayName} ({ShaderName})";
 
     /// <summary>

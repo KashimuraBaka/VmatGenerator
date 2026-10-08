@@ -28,7 +28,7 @@ public sealed class VmatGeneratorSettings
         AutoAssignOnDrop = true;
         RecurseTextureFolders = true;
         AdoptDroppedVmatFolderAsMaterialsRoot = true;
-        Rules = new List<TextureSuffixRule>();
+        Rules = [];
     }
 
     /// <summary>配置目录（<c>%APPDATA%\VmatGenerator</c>）。首次保存时才创建。</summary>
@@ -95,7 +95,7 @@ public sealed class VmatGeneratorSettings
             AutoAssignOnDrop = true,
             RecurseTextureFolders = true,
             AdoptDroppedVmatFolderAsMaterialsRoot = true,
-            Rules = new List<TextureSuffixRule>(SeedRules()),
+            Rules = [.. SeedRules()],
         };
         return settings;
     }
@@ -130,8 +130,8 @@ public sealed class VmatGeneratorSettings
     /// <c>TextureAssignmentSelfTest</c> 机器化断言。</para>
     /// </summary>
     /// <returns>默认种子规则列表，全部 <c>enabled = true</c>。</returns>
-    public static IReadOnlyList<TextureSuffixRule> SeedRules() => new List<TextureSuffixRule>
-    {
+    public static IReadOnlyList<TextureSuffixRule> SeedRules() =>
+    [
         // 法线
         new("_normal", TextureRole.Normal),
         new("_n", TextureRole.Normal),
@@ -167,10 +167,15 @@ public sealed class VmatGeneratorSettings
         // 细节 / 遮罩
         new("_detail", TextureRole.Detail),
         new("_detailmask", TextureRole.DetailMask),
+        new("_normaldetail", TextureRole.NormalDetail),
         new("_mask", TextureRole.Mask),
         new("_tintmask", TextureRole.TintMask),
         new("_selfillummask", TextureRole.SelfIllumMask),
         new("_rimmask", TextureRole.RimMask),
+        new("_hairmask", TextureRole.HairMask),
+        new("_sssmask", TextureRole.SssMask),
+        new("_retroreflectivemask", TextureRole.RetroReflectiveMask),
+        new("_decaltranslucency", TextureRole.DecalTranslucency),
         // 自发光
         new("_emissive", TextureRole.Emissive),
         new("_selfillum", TextureRole.Emissive),
@@ -182,7 +187,7 @@ public sealed class VmatGeneratorSettings
         new("_lightmap", TextureRole.Lightmap),
         new("_cube", TextureRole.CubeMap),
         new("_lowendcubemap", TextureRole.LowEndCubeMap),
-    };
+    ];
 
     /// <summary>调试用摘要。</summary>
     /// <returns>人可读的一行描述。</returns>

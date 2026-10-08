@@ -1,0 +1,129 @@
+Layer0
+{
+	shader "csgo_water_fancy.vfx"
+
+	//---- 2-Sided Rendering ----
+	F_DONT_FLIP_BACKFACE_NORMALS 0
+	F_RENDER_BACKFACES 0
+
+	//---- Interaction Effects ----
+	F_INTERACTION_EFFECTS 0
+
+	//---- Refraction ----
+	F_BLUR_REFRACTION 0
+	F_CAUSTICS 0
+	F_REFRACTION 0
+
+	//---- Caustics ----
+	g_bUseTriplanarCaustics "0"
+	g_flCausticDepthFallOffDistance "100.000"
+	g_flCausticDistortion "0.500"
+	g_flCausticShadowCutOff "0.200"
+	g_flCausticSharpness "0.500"
+	g_flCausticsStrength "40.000"
+	g_flCausticUVScaleMultiple "2.500"
+	g_vCausticsTint "[0.501961 0.501961 0.501961 1.000000]"
+
+	//---- Color ----
+	g_flTexCoordRotation "0.000"
+	g_nScaleTexCoordUByModelScaleAxis "0" // None
+	g_nScaleTexCoordVByModelScaleAxis "0" // None
+	g_vColorTint "[1.000000 1.000000 1.000000 0.000000]"
+	g_vTexCoordCenter "[0.500 0.500]"
+	g_vTexCoordOffset "[0.000 0.000]"
+	g_vTexCoordScale "[1.000 1.000]"
+	g_vTexCoordScrollSpeed "[0.000 0.000]"
+
+	//---- Debris ----
+	g_flDebrisEdgeSharpness "10.000"
+	g_flDebrisNormalStrength "1.000"
+	g_flDebrisOilyness "0.100"
+	g_flDebrisReflectance "0.100"
+	g_flDebrisScale "1.000"
+	g_flDebrisWobble "1.000"
+	g_vDebrisTint "[0.701961 0.701961 0.701961 0.000000]"
+	TextureDebris ""
+	TextureDebrisHeight ""
+	TextureDebrisNormal ""
+
+	//---- Effects ----
+	g_flRainStrength "0.000"
+
+	//---- Foam ----
+	g_flFoamScale "1.000"
+	g_flFoamWobble "1.000"
+	g_vFoamColor "[0.701961 0.701961 0.701961 1.000000]"
+	TextureFoam ""
+	TextureFoamNormal ""
+
+	//---- Fog ----
+	g_bFogEnabled "1"
+
+	//---- Interaction Effects ----
+	g_flWaterEffectCausticStrength "1.000"
+	g_flWaterEffectDisturbanceStrength "1.000"
+	g_flWaterEffectFoamStrength "1.000"
+	g_flWaterEffectSiltStrength "1.000"
+	g_flWaterEffectsRippleStrength "1.000"
+
+	//---- Map Settings ----
+	g_flSkyBoxFadeRange "0.050"
+	g_flSkyBoxScale "16.000"
+	g_vMapUVMax "[10241.000 10241.000]"
+	g_vMapUVMin "[-10271.999 -10198.991]"
+	g_vSimpleSkyReflectionColor "[1.000000 1.000000 1.000000 0.000000]"
+
+	//---- Reflections ----
+	g_flReflectance "0.200"
+	g_flReflectionDistanceEffect "0.500"
+
+	//---- Refractions ----
+	g_flRefractChromaticSeparation "0.500"
+	g_flRefractionLimit "0.100"
+	g_flRefractSampleOffset "1.000"
+	g_flUnderwaterDarkening "0.600"
+	g_flWaterDecayStrength "8.000"
+	g_flWaterFogShadowStrength "0.500"
+	g_flWaterFogStrength "0.500"
+	g_flWaterMaxDepth "100.000"
+	g_vWaterDecayColor "[1.000000 1.000000 1.000000 0.000000]"
+	g_vWaterFogColor "[0.501961 0.501961 0.501961 0.000000]"
+
+	//---- Specular ----
+	g_flSpecularBloomBoostStrength "100.000"
+	g_flSpecularBloomBoostThreshold "0.700"
+	g_flSpecularNormalMultiple "2.000"
+	g_flSpecularPower "300.000"
+
+	//---- Texture Address Mode ----
+	g_nTextureAddressModeU "0" // Wrap
+	g_nTextureAddressModeV "0" // Wrap
+
+	//---- Vertex Paint Values ----
+	g_flDebrisMax "1.000"
+	g_flDebrisMin "0.000"
+	g_flFoamMax "1.000"
+	g_flFoamMin "0.000"
+	g_flWaterRoughnessMax "1.000"
+	g_flWaterRoughnessMin "0.250"
+
+	//---- Waves ----
+	g_flEdgeHardness "10.000"
+	g_flEdgeShapeEffect "1.000"
+	g_flFresnelExponent "5.000"
+	g_flHighFreqWeight "0.500"
+	g_flLowFreqWeight "0.500"
+	g_flMedFreqWeight "0.500"
+	g_flWaterInitialDirection "1.500"
+	g_flWaterPlaneOffset "0.000"
+	g_flWavesHeightOffset "1.000"
+	g_flWavesNormalJitter "0.100"
+	g_flWavesNormalStrength "1.000"
+	g_flWavesPhaseOffset "0.400"
+	g_flWavesSharpness "0.500"
+	g_flWavesSpeed "1.000"
+	g_nWaveIterations "3"
+	g_vWaveScale "[15.000 15.000]"
+	TextureWavesHeight ""
+	TextureWavesNormal ""
+}

@@ -56,12 +56,11 @@ internal static class FolderPicker
             // 单选读 FolderName、多选读 FolderNames；两者都可能带尾部分隔符或短路径，
             // 统一交给 Normalize 归一。
             var picked = multiselect ? dlg.FolderNames : new[] { dlg.FolderName };
-            return picked
+            return [.. picked
                 .Select(Normalize)
                 .Where(p => !string.IsNullOrEmpty(p))
                 .Select(p => p!)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToArray();
+                .Distinct(StringComparer.OrdinalIgnoreCase)];
         });
 
         return ok && folders is not null ? folders : Array.Empty<string>();

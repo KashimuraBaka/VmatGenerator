@@ -191,7 +191,7 @@ public static class ErrorLog
     /// <summary>内存中的最近记录（只读快照，按时间正序）。</summary>
     public static IReadOnlyList<ErrorEntry> Recent
     {
-        get { lock (Gate) return RecentQueue.ToArray(); }
+        get { lock (Gate) return [.. RecentQueue]; }
     }
 
     /// <summary>

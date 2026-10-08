@@ -1,27 +1,20 @@
 namespace Lib;
 
 /// <summary>单条自检用例的结果。</summary>
-public sealed class SelfCheckCase
+/// <remarks>构造用例结果。</remarks>
+/// <param name="name">用例名（中文）。</param>
+/// <param name="passed">是否通过。</param>
+/// <param name="detail">断言详情；通过时通常为空。</param>
+public sealed class SelfCheckCase(string name, bool passed, string? detail)
 {
-    /// <summary>构造用例结果。</summary>
-    /// <param name="name">用例名（中文）。</param>
-    /// <param name="passed">是否通过。</param>
-    /// <param name="detail">断言详情；通过时通常为空。</param>
-    public SelfCheckCase(string name, bool passed, string? detail)
-    {
-        Name = name;
-        Passed = passed;
-        Detail = detail;
-    }
-
     /// <summary>用例名。</summary>
-    public string Name { get; }
+    public string Name { get; } = name;
 
     /// <summary>是否通过。</summary>
-    public bool Passed { get; }
+    public bool Passed { get; } = passed;
 
     /// <summary>失败时的断言详情。</summary>
-    public string? Detail { get; }
+    public string? Detail { get; } = detail;
 
     /// <summary>调试用摘要。</summary>
     /// <returns>人可读的一行描述。</returns>
@@ -29,17 +22,12 @@ public sealed class SelfCheckCase
 }
 
 /// <summary>自检报告（成功 / 失败用例明细）。</summary>
-public sealed class SelfCheckReport
+/// <remarks>构造报告。</remarks>
+/// <param name="cases">全部用例结果，保持执行顺序。</param>
+public sealed class SelfCheckReport(IReadOnlyList<SelfCheckCase> cases)
 {
-    /// <summary>构造报告。</summary>
-    /// <param name="cases">全部用例结果，保持执行顺序。</param>
-    public SelfCheckReport(IReadOnlyList<SelfCheckCase> cases)
-    {
-        Cases = cases;
-    }
-
     /// <summary>全部用例结果。</summary>
-    public IReadOnlyList<SelfCheckCase> Cases { get; }
+    public IReadOnlyList<SelfCheckCase> Cases { get; } = cases;
 
     /// <summary>是否全部通过。</summary>
     public bool Passed => Cases.All(c => c.Passed);
@@ -51,7 +39,7 @@ public sealed class SelfCheckReport
     public int PassedCount => Cases.Count(c => c.Passed);
 
     /// <summary>失败用例。</summary>
-    public IReadOnlyList<SelfCheckCase> Failures => Cases.Where(c => !c.Passed).ToList();
+    public IReadOnlyList<SelfCheckCase> Failures => [.. Cases.Where(c => !c.Passed)];
 
     /// <summary>渲染逐条结果。</summary>
     /// <returns>多行文本。</returns>
@@ -73,7 +61,7 @@ public sealed class SelfCheckReport
 /// 「后缀 → 语义槽位 → 着色器参数键」整条链路的<b>可执行自检</b>。
 ///
 /// <para>纯静态、无网络、不碰用户真实配置（文件类用例一律在 <see cref="Path.GetTempPath()"/>
-/// 下的独立临时目录中运行并在结束时清理）。调用 <see cref="Run"/> 即可得到逐条结果，
+/// 下的独立临时目录中运行并在结束时清理）。调用 <see cref="M:Lib.TextureAssignmentSelfTest.Run"/> 即可得到逐条结果，
 /// 便于 CI、调试器窗口或 GUI「关于」页调用。</para>
 ///
 /// <para><b>覆盖范围。</b>归一化、通道名派生、P1–P5 每一档的命中、三个真实着色器的解析结果、
@@ -105,7 +93,10 @@ public static class TextureAssignmentSelfTest
         Run(cases, "诊断文本 §5.6 逐字一致（AmbiguousQualified / NoMatchingKey 两句整串相等）", CaseDiagnosticTextVerbatim);
         Run(cases, "P5 多候选 → 复杂度序数决胜（csgo_effects TextureMask1/2/3）", CaseP2SmallestNumber);
         Run(cases, "诊断建议后缀闭环 INV-DIAG-CLOSURE：多候选诊断的每个建议后缀都能精确命中对应键", CaseDiagnosticSuffixClosure);
-        Run(cases, "P5 候选 channel 穷举比对（§5.6.2 冻结的 10 个）", CaseP5ChannelExhaustive);
+        Run(cases, "P5 候选 channel 穷举比对（按合并后模板冻结的 12 个）", CaseP5ChannelExhaustive);
+        Run(cases, "模板一致性：目录条目与模板解析逐项相等（参数/flag/属性/compiled 键）", CaseTemplateConsistency);
+        Run(cases, "生成：flag 取模板出厂值、Attributes 逐字回放（合并规则落点）", CaseGenerationKeepsTemplateDefaults);
+        Run(cases, "双键查找：Find 同时接受 shader 值与模板基名", CaseFindDualKey);
         Run(cases, "后缀匹配：最长后缀优先 / 整名相等 / 下划线边界", CaseSuffixMatching);
         Run(cases, "同槽位冲突：更具体的后缀胜出（§6.5）", CaseConflictBySuffixLength);
         Run(cases, "同槽位冲突：等长后缀按文件名 CompareOrdinal 升序决胜（§6.5）", CaseConflictByOrdinal);
@@ -134,6 +125,7 @@ public static class TextureAssignmentSelfTest
             Run(cases, "配置：JSON 写入 → 读回字段完全一致", () => CaseSettingsRoundTrip(sandbox));
             Run(cases, "拖拽矩阵 D1–D6 六类分档与两个根目录候选（§2.2）", () => CaseDropMatrix(sandbox));
             Run(cases, "§2.2 D4：贴图递归关闭时为 TopDirectoryOnly（顶层贴图仍要收）", () => CaseDropNoTextureRecursion(sandbox));
+            Run(cases, "生成：不同文件夹同名材质各自写出 + 已存在文件直接覆盖", () => CaseBuildPerFolderAndOverwrite(sandbox));
         }
         finally
         {
@@ -234,7 +226,9 @@ public static class TextureAssignmentSelfTest
             Eq("TextureMetalness1", TextureRoleResolver.Resolve(shader, TextureRole.Metalness).ParameterKey, "环境金属度"),
             Eq("TextureAmbientOcclusion1", TextureRoleResolver.Resolve(shader, TextureRole.AmbientOcclusion).ParameterKey, "环境 AO"),
             Eq("TextureHeight1", TextureRoleResolver.Resolve(shader, TextureRole.Height).ParameterKey, "环境高度"),
-            Eq(TextureResolveFailure.NoMatchingKey, TextureRoleResolver.Resolve(shader, TextureRole.Detail).UnresolvedReason, "环境模板无 Detail 键"));
+            // 合并后的环境模板没有 TextureDetail* 键；TextureNormalDetail1 的通道名
+            // NormalDetail 以 Detail 结尾且带限定词前缀，按 §5.2 落进 Detail 的 P5 唯一候选。
+            Eq("TextureNormalDetail1", TextureRoleResolver.Resolve(shader, TextureRole.Detail).ParameterKey, "环境 Detail 走 P5 唯一候选"));
     }
 
     private static string? CaseTierP3()
@@ -246,7 +240,9 @@ public static class TextureAssignmentSelfTest
             Eq("TextureLayer1Color", TextureRoleResolver.Resolve(shader, TextureRole.Color).ParameterKey, "LMG 颜色"),
             Eq("TextureLayer1Roughness", TextureRoleResolver.Resolve(shader, TextureRole.Roughness).ParameterKey, "LMG 粗糙度"),
             Eq("TextureLayer1AmbientOcclusion", TextureRoleResolver.Resolve(shader, TextureRole.AmbientOcclusion).ParameterKey, "LMG AO"),
-            Eq("TextureLayer1Detail", TextureRoleResolver.Resolve(shader, TextureRole.Detail).ParameterKey, "LMG 细节"),
+            // 合并后的 LMG 模板只有 Layer1 五件套（Color/Normal/Roughness/AO/Translucency），
+            // 不再声明 TextureLayer1Detail：Detail 必须判定为「模板无对应键」，不得乱填。
+            Eq(TextureResolveFailure.NoMatchingKey, TextureRoleResolver.Resolve(shader, TextureRole.Detail).UnresolvedReason, "LMG 细节（模板已无 Detail 键）"),
             Eq("TextureLayer1Translucency", TextureRoleResolver.Resolve(shader, TextureRole.Translucency).ParameterKey, "LMG 半透明"),
             Eq(false, TextureRoleResolver.Resolve(shader, TextureRole.Metalness).IsResolved, "LMG 金属度应为标量，不解析"));
     }
@@ -259,14 +255,14 @@ public static class TextureAssignmentSelfTest
             "selfcheck.p4.vfx",
             "自检 P4",
             "仅用于自检：验证别名 Token 在 P4 档生效。",
-            new List<ShaderParamTemplate>
-            {
+            [
                 new("TextureMetal", "金属", ShaderParamKind.Texture, ""),
                 new("TextureSelfIllum", "自发光", ShaderParamKind.Texture, ""),
                 new("TextureNormal", "法线", ShaderParamKind.Texture, ""),
-            },
-            Array.Empty<string>(),
-            Array.Empty<string>());
+            ],
+            featureFlags: [],
+            attributeFlags: []
+        );
 
         var metalness = TextureRoleResolver.Resolve(synthetic, TextureRole.Metalness);
         var emissive = TextureRoleResolver.Resolve(synthetic, TextureRole.Emissive);
@@ -290,15 +286,27 @@ public static class TextureAssignmentSelfTest
 
         var mask = TextureRoleResolver.Resolve(environment, TextureRole.Mask);
         var cubeMap = TextureRoleResolver.Resolve(water, TextureRole.CubeMap);
-        var rim = TextureRoleResolver.Resolve(character, TextureRole.Mask);
+        var charMask = TextureRoleResolver.Resolve(character, TextureRole.Mask);
+        var rim = TextureRoleResolver.Resolve(character, TextureRole.RimMask);
         var tintMask = TextureRoleResolver.Resolve(environment, TextureRole.TintMask);
 
         return Combine(
             Eq("TextureTintMask1", mask.ParameterKey, "环境 Mask 走 P5 唯一候选"),
             Eq(TextureKeyTier.QualifiedComposite, mask.Tier, "环境 Mask 档位"),
-            Eq("TextureLowEndCubeMap", cubeMap.ParameterKey, "水面 CubeMap 走 P5 唯一候选"),
-            Eq(TextureKeyTier.QualifiedComposite, cubeMap.Tier, "水面 CubeMap 档位"),
-            Eq("TextureRimMask", rim.ParameterKey, "角色 Mask 走 P5 唯一候选"),
+            // 合并后的水面模板不再声明 TextureLowEndCubeMap：CubeMap 槽位必须判定为
+            // 「模板无对应键」，而不是硬塞给别的贴图参数。
+            Eq(false, cubeMap.IsResolved, "水面 CubeMap 不应解析"),
+            Eq(TextureResolveFailure.NoMatchingKey, cubeMap.UnresolvedReason, "水面 CubeMap 未解析原因"),
+            // 角色模板上 TintMask / HairMask / RimMask / SssMask / RetroReflectiveMask
+            // 五个通道对 Mask 槽位全部构成 P5 合格候选，按红线判定为歧义、不写入。
+            Eq(false, charMask.IsResolved, "角色 Mask 多候选并列不应解析"),
+            Eq(TextureResolveFailure.AmbiguousQualified, charMask.UnresolvedReason, "角色 Mask 未解析原因"),
+            Eq(5, charMask.Candidates.Count, "角色 Mask 候选数"),
+            // 各专属槽位按自己的主 Token 走 P1 精确命中，不受 Mask 歧义牵连。
+            Eq("TextureRimMask", rim.ParameterKey, "RimMask 槽位按 P1 精确命中"),
+            Eq("TextureHairMask", TextureRoleResolver.Resolve(character, TextureRole.HairMask).ParameterKey, "HairMask 槽位按 P1 精确命中"),
+            Eq("TextureSssMask", TextureRoleResolver.Resolve(character, TextureRole.SssMask).ParameterKey, "SssMask 槽位按 P1 精确命中"),
+            Eq("TextureRetroReflectiveMask", TextureRoleResolver.Resolve(character, TextureRole.RetroReflectiveMask).ParameterKey, "RetroReflectiveMask 槽位按 P1 精确命中"),
             Eq("TextureTintMask1", tintMask.ParameterKey, "显式 TintMask 槽位走 P2"),
             // SelfIllumMask 的主 Token 必须让 TextureSelfIllumMask 落在 P1/P4 而不是 P5，
             // 否则用户「改名为 _selfillummask」的出路会被多候选重新堵死。
@@ -351,11 +359,12 @@ public static class TextureAssignmentSelfTest
 
         // 期望值完全按 §5.6 模板手写，**不引用**任何被测代码的派生逻辑；
         // 候选与建议后缀的顺序取 §5.6「按 ParameterIndex 升序（模板声明序）」，
-        // 对应 ShaderCatalog 中 FoamNormal(L427) → DebrisNormal(L430) → WavesNormal(L432) 的声明次序。
+        // 对应合并后 csgo_water_fancy 模板里 DebrisNormal → FoamNormal → WavesNormal
+        // 的声明次序（漂浮物三件套先于泡沫两件套，波浪两件套在最后）。
         var expectedAmbiguous =
             "该着色器没有通用的 法线 槽位，"
-            + "候选为 TextureFoamNormal / TextureDebrisNormal / TextureWavesNormal；"
-            + "请改用 _foamnormal / _debrisnormal / _wavesnormal 后缀，或改选其他着色器。";
+            + "候选为 TextureDebrisNormal / TextureFoamNormal / TextureWavesNormal；"
+            + "请改用 _debrisnormal / _foamnormal / _wavesnormal 后缀，或改选其他着色器。";
         var expectedNoMatch = "该着色器没有 颜色 / 反照率 对应的贴图参数（已跳过）。";
 
         var actualAmbiguous = TextureRoleResolver.BuildDiagnosticText(
@@ -376,8 +385,8 @@ public static class TextureAssignmentSelfTest
             Eq(false, actualAmbiguous.Contains('\n'), "诊断文本必须单行，不得含换行"),
             Eq(false, actualAmbiguous.Contains('、'), "候选连接符不得使用全角顿号「、」"),
             Eq(false, actualNoMatch.Contains('、'), "NoMatchingKey 文本不得含全角顿号「、」"),
-            Eq(true, actualAmbiguous.EndsWith("。", StringComparison.Ordinal), "歧义诊断须以句号收尾"),
-            Eq(true, actualNoMatch.EndsWith("。", StringComparison.Ordinal), "无对应键诊断须以句号收尾"));
+            Eq(true, actualAmbiguous.EndsWith('。'), "歧义诊断须以句号收尾"),
+            Eq(true, actualNoMatch.EndsWith('。'), "无对应键诊断须以句号收尾"));
     }
 
     private static string? CaseP2SmallestNumber()
@@ -453,14 +462,19 @@ public static class TextureAssignmentSelfTest
 
     /// <summary>
     /// §11 自检第 13 项 —— <b>穷举比对</b>：把实现跑出来的「可作 P5 候选的 channel 全集」
-    /// 与规格 §5.6.2 冻结的 10 个逐一比对，防止将来新增着色器时漏掉种子规则。
+    /// 与按合并后模板重新冻结的 12 个逐一比对，防止将来新增着色器时漏掉种子规则。
     /// </summary>
     private static string? CaseP5ChannelExhaustive()
     {
+        // 合并后的模板世界里：TextureDetailMask / TextureLowEndCubeMap 已不存在（DetailMask、
+        // LowEndCubeMap 两个 channel 自然不再出现）；角色与环境的 HairMask / SssMask /
+        // RetroReflectiveMask / NormalDetail 是新晋 P5 候选。
+        // DecalTranslucency 只在 Translucency 已有 P1 直名的模板上才会构成 P5，
+        // 而 ResolveCandidates 只报最低档，因此不在本集合内。
         var expected = new SortedSet<string>(StringComparer.Ordinal)
         {
-            "TintMask", "SelfIllumMask", "DetailMask", "RimMask", "LowEndCubeMap",
-            "FoamNormal", "DebrisNormal", "WavesNormal", "WavesHeight", "DebrisHeight",
+            "TintMask", "SelfIllumMask", "RimMask", "HairMask", "SssMask", "RetroReflectiveMask",
+            "NormalDetail", "FoamNormal", "DebrisNormal", "WavesNormal", "WavesHeight", "DebrisHeight",
         };
 
         var actual = new SortedSet<string>(StringComparer.Ordinal);
@@ -506,6 +520,137 @@ public static class TextureAssignmentSelfTest
             }
         }
 
+        return failures.Count == 0 ? null : string.Join("；", failures);
+    }
+
+    /// <summary>
+    /// 模板一致性：目录里每个条目的参数键序、flag 集合、Attributes、Compiled Textures
+    /// 必须与内嵌模板原文的解析结果逐项相等——「模板是唯一真值来源」的可执行化。
+    /// 直接拿 <see cref="TemplateParser"/> 重解析模板文本与目录条目对账。
+    /// </summary>
+    private static string? CaseTemplateConsistency()
+    {
+        var failures = new List<string>();
+
+        foreach (var shader in ShaderCatalog.All)
+        {
+            var text = ShaderTemplateEmitter.LoadEmbedded(shader.TemplateResourceName);
+            if (text is null)
+            {
+                failures.Add($"{shader.TemplateResourceName}: 内嵌模板缺失");
+                continue;
+            }
+
+            var parsed = TemplateParser.Parse(shader.TemplateResourceName, text);
+
+            if (parsed.Parameters.Count != shader.Parameters.Count)
+                failures.Add($"{shader.TemplateResourceName}: 参数数量 {shader.Parameters.Count} ≠ 模板 {parsed.Parameters.Count}");
+            var n = Math.Min(parsed.Parameters.Count, shader.Parameters.Count);
+            for (var i = 0; i < n; i++)
+            {
+                if (!string.Equals(parsed.Parameters[i].Key, shader.Parameters[i].Key, StringComparison.Ordinal))
+                    failures.Add($"{shader.TemplateResourceName}: 第 {i} 个参数键 {shader.Parameters[i].Key} ≠ 模板 {parsed.Parameters[i].Key}");
+                if (!string.Equals(parsed.Parameters[i].DefaultValue, shader.Parameters[i].DefaultValue, StringComparison.Ordinal))
+                    failures.Add($"{shader.TemplateResourceName}: 参数 {shader.Parameters[i].Key} 默认值漂移");
+            }
+
+            if (!parsed.FeatureFlags.SequenceEqual(shader.FeatureFlags, StringComparer.Ordinal))
+                failures.Add($"{shader.TemplateResourceName}: flag 集合或顺序与模板不一致");
+
+            // 「合并后的设置保持默认值」：合并模板的出厂值必须逐条为 0。
+            foreach (var (flag, value) in parsed.FeatureFlagDefaults)
+            {
+                if (value != "0")
+                    failures.Add($"{shader.TemplateResourceName}: 合并后 flag {flag} 出厂值为 {value}，应为 0");
+            }
+
+            if (!parsed.CompiledTextureKeys.SequenceEqual(shader.CompiledTextureKeys, StringComparer.Ordinal))
+                failures.Add($"{shader.TemplateResourceName}: Compiled Textures 键与模板不一致");
+
+            if (!parsed.TemplateAttributes.SequenceEqual(shader.TemplateAttributes))
+                failures.Add($"{shader.TemplateResourceName}: Attributes 与模板不一致");
+        }
+
+        if (ShaderCatalog.All.Count != 11)
+            failures.Add($"模板目录共 {ShaderCatalog.All.Count} 项，预期 11 项");
+
+        return failures.Count == 0 ? null : string.Join("；", failures);
+    }
+
+    /// <summary>
+    /// 生成端：默认生成不得强制打开任何 flag（出厂值全 0 → 写出全 0），
+    /// Attributes 必须逐字来自模板，空 Attributes 的模板不写 Attributes 块。
+    /// </summary>
+    private static string? CaseGenerationKeepsTemplateDefaults()
+    {
+        var failures = new List<string>();
+
+        foreach (var shader in ShaderCatalog.All)
+        {
+            var text = ShaderTemplateEmitter.EmitDefault(shader);
+            var layer = TemplateParser.FindLayer(VmatFormat.Parse(text));
+            if (layer is null)
+            {
+                failures.Add($"{shader.TemplateResourceName}: 生成文本解析不出 Layer0");
+                continue;
+            }
+
+            foreach (var flag in shader.FeatureFlags)
+            {
+                var emitted = layer.FindChild(flag)?.Value;
+                var expected = shader.FeatureFlagDefaults.GetValueOrDefault(flag, "0");
+                if (emitted != expected)
+                    failures.Add($"{shader.TemplateResourceName}: 默认生成把 {flag} 写成 {emitted}，应为出厂值 {expected}");
+            }
+
+            // Attributes：模板没有就不写；有就逐字回放（键与值都对上）。
+            var block = layer.FindChild("Attributes");
+            if (shader.TemplateAttributes.Count == 0)
+            {
+                if (block is not null)
+                    failures.Add($"{shader.TemplateResourceName}: 模板无 Attributes 但生成文本写了该块");
+            }
+            else
+            {
+                if (block is null)
+                {
+                    failures.Add($"{shader.TemplateResourceName}: 模板有 Attributes 但生成文本缺该块");
+                    continue;
+                }
+                foreach (var attr in shader.TemplateAttributes)
+                {
+                    if (block.FindChild(attr.Key)?.Value != attr.Value)
+                        failures.Add($"{shader.TemplateResourceName}: Attributes.{attr.Key} 未逐字回放");
+                }
+            }
+        }
+
+        // 显式启用必须仍然生效（默认保持出厂值 ≠ 永远写 0）。
+        var env = Require("csgo_environment.vfx");
+        var enabled = TemplateParser.FindLayer(VmatFormat.Parse(
+            ShaderTemplateEmitter.EmitDefault(env, ["F_WETNESS"])))?.FindChild("F_WETNESS")?.Value;
+        if (enabled != "1")
+            failures.Add($"显式启用 F_WETNESS 后应为 1，实际 {enabled}");
+
+        return failures.Count == 0 ? null : string.Join("；", failures);
+    }
+
+    /// <summary>
+    /// 双键查找：settings 里存的是 shader 值（<c>csgo_environment.vfx</c>），
+    /// 资源枚举给的是模板基名（<c>csgo_environment</c>），两种写法都必须命中同一条目。
+    /// </summary>
+    private static string? CaseFindDualKey()
+    {
+        var failures = new List<string>();
+        foreach (var shader in ShaderCatalog.All)
+        {
+            if (!string.Equals(ShaderCatalog.Find(shader.ShaderName)?.TemplateResourceName, shader.TemplateResourceName, StringComparison.Ordinal))
+                failures.Add($"{shader.ShaderName}: 按 shader 值查找失败");
+            if (!string.Equals(ShaderCatalog.Find(shader.TemplateResourceName)?.TemplateResourceName, shader.TemplateResourceName, StringComparison.Ordinal))
+                failures.Add($"{shader.TemplateResourceName}: 按模板基名查找失败");
+        }
+        if (ShaderCatalog.Find("不存在的着色器") is not null)
+            failures.Add("未知名称不应命中任何条目");
         return failures.Count == 0 ? null : string.Join("；", failures);
     }
 
@@ -575,11 +720,11 @@ public static class TextureAssignmentSelfTest
             Eq(outside, outsideValue, "根目录外写原路径"),
             Eq(true, !outsideValue.Contains("..", StringComparison.Ordinal), "原路径不得含 .."),
             Eq(outside, noRoot, "贴图根为空时写原路径"),
-            Eq("wall", Path.GetFileName(TexturePathRules.CommonParentDirectory(new[]
-            {
+            Eq("wall", Path.GetFileName(TexturePathRules.CommonParentDirectory(
+            [
                 Path.Combine(sandbox.TextureRoot, "wall", "a.png"),
                 Path.Combine(sandbox.TextureRoot, "wall", "b.png"),
-            }))!, "公共父目录"),
+            ]))!, "公共父目录"),
             Eq(true, TexturePathRules.IsTextureFile("x.PNG"), "扩展名大小写不敏感"),
             Eq(false, TexturePathRules.IsTextureFile("x.vmat"), ".vmat 不是贴图"),
             // §11-8：GUI 的上下移动按钮改的是 Rules 的顺序（即 JSON 数组下标）。
@@ -660,7 +805,7 @@ public static class TextureAssignmentSelfTest
         var shortFile = Path.Combine(sandbox.TextureRoot, "wall", "brick_n.png");
         var result = TextureAssigner.Assign(
             Require("csgo_environment.vfx"),
-            new[] { normalFile, shortFile },
+            [normalFile, shortFile],
             VmatGeneratorSettings.CreateDefault().Rules,
             sandbox.TextureRoot);
 
@@ -808,7 +953,7 @@ public static class TextureAssignmentSelfTest
             Eq(TextureResolveFailure.AmbiguousQualified, unresolvedAmbiguous[0].UnresolvedReason,
                 "S10+11b：歧义角色的原因"),
             Eq(true, unresolvedAmbiguous[0].DiagnosticText.Contains("请改用", StringComparison.Ordinal)
-                       && unresolvedAmbiguous[0].DiagnosticText.EndsWith("。", StringComparison.Ordinal),
+                       && unresolvedAmbiguous[0].DiagnosticText.EndsWith('。'),
                 "S10+11b：歧义诊断已含可操作建议且以句号收尾"));
     }
 
@@ -987,9 +1132,9 @@ public static class TextureAssignmentSelfTest
         if (!save.Success) return $"保存失败：{save.ErrorMessage}";
 
         var reloaded = VmatGeneratorSettingsStore.LoadFromFile(path, out var report);
-        if (reloaded is null) return "读回失败：返回 null";
-
-        return Combine(
+        return reloaded is null
+            ? "读回失败：返回 null"
+            : Combine(
             Eq(save.FilePath, path, "保存路径"),
             Eq(SettingsLoadOutcome.Loaded, report.Outcome, "往返后应判定为 Loaded"),
             Eq(0, report.RepairedFields.Count, "往返不应触发修复"),
@@ -1069,11 +1214,11 @@ public static class TextureAssignmentSelfTest
             Eq(0, m6.VmatFiles.Count, "D6 零 .vmat"),
             Eq(DropCategory.None, m7.Category, "空拖入分类"),
             // §2.3 CanAccept
-            Eq(true, DropImportService.CanAccept(new[] { vmat1 }), "CanAccept(.vmat)"),
-            Eq(true, DropImportService.CanAccept(new[] { topTexture }), "CanAccept(贴图)"),
+            Eq(true, DropImportService.CanAccept([vmat1]), "CanAccept(.vmat)"),
+            Eq(true, DropImportService.CanAccept([topTexture]), "CanAccept(贴图)"),
             Eq(false, DropImportService.CanAccept(null), "CanAccept(null)"),
-            Eq(false, DropImportService.CanAccept(Array.Empty<string>()), "CanAccept(空数组)"),
-            Eq(false, DropImportService.CanAccept(new[] { "   " }), "CanAccept(全空白)"));
+            Eq(false, DropImportService.CanAccept([]), "CanAccept(空数组)"),
+            Eq(false, DropImportService.CanAccept(["   "]), "CanAccept(全空白)"));
     }
 
     /// <summary>
@@ -1128,6 +1273,78 @@ public static class TextureAssignmentSelfTest
         }
     }
 
+    /// <summary>
+    /// <see cref="VmatBuildService.BuildByGroup"/> 的两条红线：
+    /// <list type="number">
+    /// <item>计划键带「相对目录 + '\0'」时，<b>不同文件夹里的同名材质各自写出</b>，
+    /// 各自镜像到自己的输出子目录——旧实现只按材质名聚合，第二个文件夹的
+    /// .vmat 会被并掉、根本没被写出来；</item>
+    /// <item><c>overwriteExisting: true</c> 时同名目标<b>直接覆盖</b>，
+    /// 不再进 skipped 名单——向导第三步现在传 true。</item>
+    /// </list>
+    /// </summary>
+    private static string? CaseBuildPerFolderAndOverwrite(Sandbox sandbox)
+    {
+        var shader = Require("csgo_environment.vfx");
+        var rules = VmatGeneratorSettings.CreateDefault().Rules;
+
+        var dirA = Path.Combine(sandbox.TextureRoot, "concrete");
+        var dirB = Path.Combine(sandbox.TextureRoot, "floor");
+        Directory.CreateDirectory(dirA);
+        Directory.CreateDirectory(dirB);
+
+        static string Write(string dir, string name)
+        {
+            var file = Path.Combine(dir, name);
+            File.WriteAllBytes(file, []);
+            return file;
+        }
+
+        var aColor = Write(dirA, "wall_diffuse.png");
+        var aNormal = Write(dirA, "wall_normal.png");
+        var bColor = Write(dirB, "wall_diffuse.png");
+
+        var project = Path.Combine(sandbox.Root, "proj-" + Guid.NewGuid().ToString("N"));
+        var plan = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["concrete\0wall"] = [aColor, aNormal],
+            ["floor\0wall"] = [bColor],
+        };
+
+        var first = VmatBuildService.BuildByGroup(
+            shader, plan, rules, sandbox.TextureRoot, project, overwriteExisting: true);
+
+        var outA = Path.Combine(project, "concrete", "wall.vmat");
+        var outB = Path.Combine(project, "floor", "wall.vmat");
+        var textA = File.Exists(outA) ? File.ReadAllText(outA) : string.Empty;
+        var textB = File.Exists(outB) ? File.ReadAllText(outB) : string.Empty;
+
+        // 覆盖语义：把 A 改成哨兵内容后再生成一次，必须被整体重写而不是跳过。
+        File.WriteAllText(outA, "SENTINEL");
+        var second = VmatBuildService.BuildByGroup(
+            shader, plan, rules, sandbox.TextureRoot, project, overwriteExisting: true);
+        var textA2 = File.Exists(outA) ? File.ReadAllText(outA) : string.Empty;
+
+        return Combine(
+            Eq(2, first.WrittenFiles.Count, "两个文件夹的同名材质都要写出"),
+            Eq(0, first.SkippedExisting.Count, "首跑不应有跳过"),
+            Eq(true, File.Exists(outA), "concrete/wall.vmat 存在"),
+            Eq(true, File.Exists(outB), "floor/wall.vmat 存在"),
+            Eq(true, textA.Contains("concrete/wall_diffuse.png", StringComparison.Ordinal),
+                "concrete 的 vmat 引用自己的贴图"),
+            Eq(true, textB.Contains("floor/wall_diffuse.png", StringComparison.Ordinal),
+                "floor 的 vmat 引用自己的贴图"),
+            Eq(false, textA.Contains("floor/wall_diffuse.png", StringComparison.Ordinal),
+                "concrete 的 vmat 不得混入 floor 的贴图"),
+            Eq("floor", Path.GetFileName(Path.GetDirectoryName(outB)), "输出镜像到 floor 子目录"),
+            Eq("concrete", Path.GetFileName(Path.GetDirectoryName(outA)), "输出镜像到 concrete 子目录"),
+            Eq(2, second.WrittenFiles.Count, "第二次生成仍全部写出"),
+            Eq(0, second.SkippedExisting.Count, "overwrite=true 不产生跳过"),
+            Eq(false, textA2.Contains("SENTINEL", StringComparison.Ordinal), "已存在的目标被整体覆盖"),
+            Eq(true, textA2.TrimStart().StartsWith("\"Layer0\"", StringComparison.Ordinal),
+                "覆盖后的内容是 KV1 正文"));
+    }
+
     // ── 沙箱与辅助 ──────────────────────────────────────────────────────────
 
     private static ShaderTemplate Require(string shaderName) =>
@@ -1167,9 +1384,9 @@ public static class TextureAssignmentSelfTest
             "fx/fx_mask.png", "fx/banner_mask.png",
         })
         {
-            File.WriteAllBytes(Path.Combine(textureRoot, relative.Replace('/', Path.DirectorySeparatorChar)), Array.Empty<byte>());
+            File.WriteAllBytes(Path.Combine(textureRoot, relative.Replace('/', Path.DirectorySeparatorChar)), []);
         }
-        File.WriteAllBytes(Path.Combine(outside, "wall_normal.png"), Array.Empty<byte>());
+        File.WriteAllBytes(Path.Combine(outside, "wall_normal.png"), []);
 
         return new Sandbox(root, textureRoot, outside, settings);
     }

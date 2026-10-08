@@ -30,7 +30,7 @@ public sealed partial class MainViewModel : ObservableObject
     /// </summary>
     private VmatGeneratorSettings _settings = RegistrySettingsStore.LoadOrDefault();
 
-    private readonly List<TextureSuffixRuleViewModel> _attached = new();
+    private readonly List<TextureSuffixRuleViewModel> _attached = [];
 
     /// <summary>最近一次「重新载入」的加载报告文案（由 <see cref="ReadSettingsFromDisk"/> 写入）。</summary>
     private string _lastLoadNote = string.Empty;
@@ -82,7 +82,7 @@ public sealed partial class MainViewModel : ObservableObject
     private bool _adoptDroppedVmatFolderAsMaterialsRoot = true;
 
     /// <summary>后缀规则表；<b>集合顺序即优先级</b>（并列时以下标决胜）。</summary>
-    public ObservableCollection<TextureSuffixRuleViewModel> Rules { get; } = new();
+    public ObservableCollection<TextureSuffixRuleViewModel> Rules { get; } = [];
 
     /// <summary>当前选中的规则行（删除 / 上下移动均作用于它）。</summary>
     [ObservableProperty]
@@ -144,12 +144,10 @@ public sealed partial class MainViewModel : ObservableObject
     public IReadOnlyList<TextureRole> GetSupportedRoles()
     {
         if (SelectedShader is null)
-            return Enum.GetValues<TextureRole>().Where(r => r != TextureRole.Unknown).ToArray();
+            return [.. Enum.GetValues<TextureRole>().Where(r => r != TextureRole.Unknown)];
 
         var shader = SelectedShader;
-        return Enum.GetValues<TextureRole>()
-            .Where(r => r != TextureRole.Unknown && TextureRoleResolver.Resolve(shader, r).IsResolved)
-            .ToArray();
+        return [.. Enum.GetValues<TextureRole>().Where(r => r != TextureRole.Unknown && TextureRoleResolver.Resolve(shader, r).IsResolved)];
     }
 
     /// <summary>
@@ -381,7 +379,7 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     private void ApplyRules(VmatGeneratorSettings settings) =>
-        settings.Rules = Rules.Select(r => r.ToRule()).ToList();
+        settings.Rules = [.. Rules.Select(r => r.ToRule())];
 
     /// <summary>
     /// 用磁盘上读回来的对象整体覆盖主窗口的共享配置（重新载入用）。
@@ -396,9 +394,7 @@ public sealed partial class MainViewModel : ObservableObject
         target.AutoAssignOnDrop = source.AutoAssignOnDrop;
         target.RecurseTextureFolders = source.RecurseTextureFolders;
         target.AdoptDroppedVmatFolderAsMaterialsRoot = source.AdoptDroppedVmatFolderAsMaterialsRoot;
-        target.Rules = source.Rules
-            .Select(r => new TextureSuffixRule(r.Suffix, r.Role, r.Enabled))
-            .ToList();
+        target.Rules = [.. source.Rules.Select(r => new TextureSuffixRule(r.Suffix, r.Role, r.Enabled))];
     }
 
     /// <summary>从配置对象整体刷新界面字段（构造时 / 重新载入时调用）。</summary>
@@ -616,7 +612,7 @@ public sealed partial class MainViewModel : ObservableObject
 
     private string BuildTestReport(ShaderTemplate shader, IReadOnlyList<string> files)
     {
-        var matcher = new TextureSuffixMatcher(Rules.Select(r => r.ToRule()).ToList());
+        var matcher = new TextureSuffixMatcher([.. Rules.Select(r => r.ToRule())]);
         var sb = new StringBuilder();
         sb.AppendLine($"着色器：{shader.ShaderName}　贴图根目录：{(TextureRoot.Length > 0 ? TextureRoot : "（未设置，写原路径）")}");
         sb.AppendLine($"文件 → 命中后缀 → 角色 → 档位 → 参数键 → 写入值");
@@ -657,10 +653,8 @@ public sealed partial class MainViewModel : ObservableObject
 
         var param = shader.Parameters
             .FirstOrDefault(p => string.Equals(p.Key, parameterKey, StringComparison.Ordinal));
-        if (param is null) return "—";
-
-        if (string.IsNullOrEmpty(param.DefaultValue))
-            return param.Kind == ShaderParamKind.Texture ? "（无默认贴图）" : "（空）";
-        return param.DefaultValue;
+        return param is null
+            ? "—"
+            : string.IsNullOrEmpty(param.DefaultValue) ? param.Kind == ShaderParamKind.Texture ? "（无默认贴图）" : "（空）" : param.DefaultValue;
     }
 }

@@ -42,6 +42,7 @@ public static class VmatFormat
 /// </summary>
 public static class VmatNodeExtensions
 {
+    /// <inheritdoc/>
     public static IEnumerable<VmatNode> Flatten(this VmatNode node)
     {
         yield return node;
@@ -50,69 +51,80 @@ public static class VmatNodeExtensions
                 yield return desc;
     }
 
+    /// <inheritdoc/>
     public static string ToKeyValueText(this VmatNode root) => VmatFormat.Serialize(root);
 
+    /// <inheritdoc/>
     public static float GetFloat(this VmatNode node, string key, float fallback = 0f)
     {
         var c = node.FindChild(key);
         return c?.TryParseFloat() ?? fallback;
     }
 
+    /// <inheritdoc/>
     public static int GetInt(this VmatNode node, string key, int fallback = 0)
     {
         var c = node.FindChild(key);
         return c?.TryParseInt() ?? fallback;
     }
 
+    /// <inheritdoc/>
     public static bool GetBool(this VmatNode node, string key, bool fallback = false)
     {
         var c = node.FindChild(key);
         return c?.TryParseBool() ?? fallback;
     }
 
+    /// <inheritdoc/>
     public static string GetString(this VmatNode node, string key, string fallback = "")
     {
         var c = node.FindChild(key);
         return c?.Value ?? fallback;
     }
 
+    /// <inheritdoc/>
     public static Vector4 GetVector(this VmatNode node, string key, Vector4? fallback = null)
     {
         var c = node.FindChild(key);
-        if (c is null) return fallback ?? default;
-        return c.TryParseVector() ?? fallback ?? default;
+        return c is null ? fallback ?? default : c.TryParseVector() ?? fallback ?? default;
     }
 
+    /// <inheritdoc/>
     public static void SetFloat(this VmatNode node, string key, float value)
     {
         var c = node.FindChild(key) ?? node.AddChild(key);
         c.Value = value.ToString("0.######", CultureInfo.InvariantCulture);
     }
 
+    /// <inheritdoc/>
     public static void SetInt(this VmatNode node, string key, int value)
     {
         var c = node.FindChild(key) ?? node.AddChild(key);
         c.Value = value.ToString(CultureInfo.InvariantCulture);
     }
 
+    /// <inheritdoc/>
     public static void SetBool(this VmatNode node, string key, bool value)
     {
         var c = node.FindChild(key) ?? node.AddChild(key);
         c.Value = value ? "1" : "0";
     }
 
+    /// <inheritdoc/>
     public static void SetString(this VmatNode node, string key, string value)
     {
         var c = node.FindChild(key) ?? node.AddChild(key);
         c.Value = value;
     }
 
+    /// <inheritdoc/>
     public static void SetVector(this VmatNode node, string key, Vector4 value)
     {
         var c = node.FindChild(key) ?? node.AddChild(key);
         c.Value = value.ToString();
     }
 
+    /// <inheritdoc/>
     public static VmatNode AddChild(this VmatNode node, string key)
     {
         var existing = node.FindChild(key);
@@ -122,11 +134,13 @@ public static class VmatNodeExtensions
         return child;
     }
 
+    /// <inheritdoc/>
     public static void RemoveChild(this VmatNode node, string key)
     {
         node.Children.RemoveAll(c => string.Equals(c.Key, key, StringComparison.Ordinal));
     }
 
+    /// <inheritdoc/>
     public static VmatNode FirstContainer(this VmatNode node) =>
         node.Children.FirstOrDefault(c => c.IsContainer) ?? node;
 }

@@ -241,13 +241,14 @@ public sealed class DropImportService
     }
 
     /// <summary>判定六类分档（§2.2 的判定条件列）。</summary>
-    private static DropCategory Classify(int vmatCount, int textureCount, int directoryCount)
-    {
-        if (vmatCount > 0 && textureCount > 0) return DropCategory.Mixed;
-        if (vmatCount > 0) return directoryCount > 0 ? DropCategory.MaterialFolder : DropCategory.VmatFile;
-        if (textureCount > 0) return directoryCount > 0 ? DropCategory.TextureOnlyFolder : DropCategory.TextureFiles;
-        return DropCategory.Unsupported;
-    }
+    private static DropCategory Classify(int vmatCount, int textureCount, int directoryCount) =>
+        vmatCount > 0 && textureCount > 0
+            ? DropCategory.Mixed
+            : vmatCount > 0
+                ? directoryCount > 0 ? DropCategory.MaterialFolder : DropCategory.VmatFile
+                : textureCount > 0
+                    ? directoryCount > 0 ? DropCategory.TextureOnlyFolder : DropCategory.TextureFiles
+                    : DropCategory.Unsupported;
 
     /// <summary>
     /// 递归展开一个目录。<c>.vmat</c> 与无关文件始终递归；贴图按

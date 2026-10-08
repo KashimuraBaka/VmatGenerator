@@ -1,0 +1,85 @@
+Layer0
+{
+	shader "csgo_static_overlay.vfx"
+
+	//---- 2-Sided Rendering ----
+	F_DONT_FLIP_BACKFACE_NORMALS 0
+	F_RENDER_BACKFACES 0
+
+	//---- Animation ----
+	F_TEXTURE_ANIMATION 0
+
+	//---- Lighting ----
+	F_LIT 0
+
+	//---- PBR ----
+	F_AUTOMATIC_PBR_COLOR_FITTING 0
+
+	//---- Shadows ----
+	F_DO_NOT_CAST_SHADOWS 0
+
+	//---- Tint Mask ----
+	F_TINT_MASK 0
+
+	//---- Vertex Color ----
+	F_PAINT_VERTEX_COLORS 0
+
+	//---- Z-Buffering ----
+	F_DISABLE_Z_BUFFERING 0
+
+	//---- Z-Prepass ----
+	F_DISABLE_Z_PREPASS 0
+
+	//---- Ambient Occlusion ----
+	TextureAmbientOcclusion ""
+
+	//---- Color ----
+	g_flModelTintAmount "1.000"
+	g_flTexCoordRotation "0.000"
+	g_fTextureColorBrightness "1.000"
+	g_fTextureColorContrast "1.000"
+	g_fTextureColorSaturation "1.000"
+	g_nScaleTexCoordUByModelScaleAxis "0" // None
+	g_nScaleTexCoordVByModelScaleAxis "0" // None
+	g_vColorTint "[1.000000 1.000000 1.000000 0.000000]"
+	g_vTexCoordCenter "[0.500 0.500]"
+	g_vTexCoordOffset "[0.000 0.000]"
+	g_vTexCoordScale "[1.000 1.000]"
+	g_vTexCoordScrollSpeed "[0.000 0.000]"
+	g_vTextureColorCorrectionTint "[1.000000 1.000000 1.000000 0.000000]"
+	TextureColor ""
+	TextureTintMask ""
+
+	//---- Fog ----
+	g_bFogEnabled "1"
+
+	//---- Lighting ----
+	g_bMaskRoughnessAdjustmentsByTintMask "0"
+	g_fTextureRoughnessBrightness "1.000"
+	g_fTextureRoughnessContrast "1.000"
+	TextureMetalness ""
+	TextureRoughness ""
+
+	//---- Normal Map ----
+	g_fTextureNormalContrast "1.000"
+	TextureNormal ""
+
+	//---- Self Illum ----
+	g_flSelfIllumAlbedoFactor "1.000"
+	g_flSelfIllumBrightness "0.000"
+	g_flSelfIllumScale "1.000"
+	g_vSelfIllumScrollSpeed "[0.000 0.000]"
+	g_vSelfIllumTint "[1.000000 1.000000 1.000000 0.000000]"
+	TextureSelfIllumMask ""
+
+	//---- Texture Address Mode ----
+	g_nTextureAddressModeU "0" // Wrap
+	g_nTextureAddressModeV "0" // Wrap
+
+	//---- Texture Animation ----
+	g_flAnimationFrame "0.000"
+	g_flAnimationTimeOffset "0.000"
+	g_flAnimationTimePerFrame "0.100"
+	g_nNumAnimationCells "1"
+	g_vAnimationGrid "[1 1]"
+}

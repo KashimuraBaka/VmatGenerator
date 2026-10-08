@@ -259,7 +259,7 @@ public static class VmatGeneratorSettingsStore
     public static void RestoreDefaultRules(VmatGeneratorSettings settings)
     {
         if (settings is null) return;
-        settings.Rules = new List<TextureSuffixRule>(VmatGeneratorSettings.SeedRules());
+        settings.Rules = [.. VmatGeneratorSettings.SeedRules()];
     }
 
     /// <summary>
@@ -430,7 +430,7 @@ public static class VmatGeneratorSettingsStore
         // rules —— 缺键 / null 视为首次运行（不记录修复）；显式 [] 保留为空，绝不回填。
         settings.Rules = obj["rules"] switch
         {
-            null => new List<TextureSuffixRule>(VmatGeneratorSettings.SeedRules()),
+            null => [.. VmatGeneratorSettings.SeedRules()],
             JsonArray array => RepairRules(ReadRules(array, repairedList), repairedList),
             _ => RepairDefaultRules(repairedList),
         };
@@ -442,7 +442,7 @@ public static class VmatGeneratorSettingsStore
     private static List<TextureSuffixRule> RepairDefaultRules(List<string> repaired)
     {
         repaired.Add("rules");
-        return new List<TextureSuffixRule>(VmatGeneratorSettings.SeedRules());
+        return [.. VmatGeneratorSettings.SeedRules()];
     }
 
     private static bool ReadBool(JsonObject obj, string name, bool fallback, List<string> repaired)
@@ -524,7 +524,7 @@ public static class VmatGeneratorSettingsStore
     private static List<TextureSuffixRule> RepairRules(List<TextureSuffixRule>? raw, List<string> repaired)
     {
         var result = new List<TextureSuffixRule>();
-        if (raw is null) return new List<TextureSuffixRule>(VmatGeneratorSettings.SeedRules());
+        if (raw is null) return [.. VmatGeneratorSettings.SeedRules()];
 
         var seen = new HashSet<string>(StringComparer.Ordinal);
         for (var i = 0; i < raw.Count; i++)

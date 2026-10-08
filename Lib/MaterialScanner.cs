@@ -4,11 +4,12 @@ namespace Lib;
 
 /// <summary>
 /// Recursively discovers <c>.vmat</c> files under a root directory, parses each
-/// file, and groups them by shader so the UI can show a "shader &rarr; materials"
+/// file, and groups them by shader so the UI can show a "shader → materials"
 /// hierarchy.
 /// </summary>
 public sealed class MaterialScanner
 {
+    /// <inheritdoc/>
     public IReadOnlyList<VmatDocument> Scan(string root)
     {
         if (!Directory.Exists(root)) return Array.Empty<VmatDocument>();
@@ -23,19 +24,22 @@ public sealed class MaterialScanner
             }
             catch (Exception ex)
             {
-                var errNode = new VmatNode("Layer0");
-                errNode.Value = ex.Message;
+                var errNode = new VmatNode("Layer0")
+                {
+                    Value = ex.Message
+                };
                 results.Add(new VmatDocument(path, errNode));
             }
         }
         return results;
     }
 
+    /// <inheritdoc/>
     public IEnumerable<(string Shader, IReadOnlyList<VmatDocument> Materials)> GroupByShader(IEnumerable<VmatDocument> docs) =>
         docs
             .GroupBy(d => string.IsNullOrEmpty(d.ShaderName) ? "(no shader)" : d.ShaderName)
             .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
-            .Select(g => (g.Key, (IReadOnlyList<VmatDocument>)g.OrderBy(d => d.DisplayName, StringComparer.OrdinalIgnoreCase).ToList()));
+            .Select(g => (g.Key, (IReadOnlyList<VmatDocument>)[.. g.OrderBy(d => d.DisplayName, StringComparer.OrdinalIgnoreCase)]));
 }
 
 /// <summary>
@@ -55,7 +59,6 @@ public sealed class VmatGenerator
         ShaderTemplate shader,
         IDictionary<string, string> values,
         IEnumerable<string>? enabledFeatureFlags = null,
-        IEnumerable<string>? enabledAttributeFlags = null,
         IDictionary<string, string>? systemAttributeOverrides = null,
         IDictionary<string, string>? compiledTextureOverrides = null)
     {
@@ -63,15 +66,15 @@ public sealed class VmatGenerator
         root.SetString("shader", shader.ShaderName);
 
         var enabledFlags = new HashSet<string>(enabledFeatureFlags ?? Array.Empty<string>(), StringComparer.Ordinal);
-        var disabledFlags = new HashSet<string>(shader.FeatureFlags, StringComparer.Ordinal);
-        foreach (var flag in enabledFlags) disabledFlags.Remove(flag);
 
         // Feature flags come first so they show up near the top of the file (this is the
-        // convention the workspace samples use).
+        // convention the workspace samples use). Flags the user did not explicitly enable
+        // fall back to the template's factory default ("合并后的设置保持默认值"),
+        // which is "0" for merged templates and whatever the template shipped otherwise.
         foreach (var flag in shader.FeatureFlags)
         {
             var c = root.AddChild(flag);
-            c.Value = enabledFlags.Contains(flag) ? "1" : "0";
+            c.Value = enabledFlags.Contains(flag) ? "1" : shader.FeatureFlagDefaults.GetValueOrDefault(flag, "0");
         }
 
         // Parameters: include every param regardless of subgroup gating so the
@@ -93,10 +96,10 @@ public sealed class VmatGenerator
             child.Value = NormalizeValue(p, raw);
         }
 
-        // Compiled Textures: always present so the Source 2 compiler's automatic keys
-        // are not accidentally stripped. Values come from user overrides or are left
-        // empty for the user to fill in.
-        var compiled = root.AddChild("Compiled Textures");
+        // Compiled Textures: emitted only when there is something to emit — either the
+        // template declares compiled keys or a texture assignment maps to a compiled key.
+        // Values come from user overrides, from the TextureFoo -> g_tFoo mapping of the
+        // selected texture values, or are left empty for the user to fill in.
         var compiledKeys = new HashSet<string>(shader.CompiledTextureKeys, StringComparer.Ordinal);
         // Compute the mapping TextureFoo -> g_tFoo for every selected texture value.
         var compiledValueMap = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -110,15 +113,19 @@ public sealed class VmatGenerator
                 compiledValueMap[key] = tex + ".vtex";
             }
         }
-        foreach (var key in compiledKeys)
+        if (compiledKeys.Count > 0)
         {
-            string? cVal = null;
-            if (compiledTextureOverrides is not null && compiledTextureOverrides.TryGetValue(key, out var ov) && !string.IsNullOrEmpty(ov))
-                cVal = ov;
-            else if (compiledValueMap.TryGetValue(key, out var fromValue))
-                cVal = fromValue;
-            var child = compiled.AddChild(key);
-            child.Value = cVal ?? string.Empty;
+            var compiled = root.AddChild("Compiled Textures");
+            foreach (var key in compiledKeys)
+            {
+                string? cVal = null;
+                if (compiledTextureOverrides is not null && compiledTextureOverrides.TryGetValue(key, out var ov) && !string.IsNullOrEmpty(ov))
+                    cVal = ov;
+                else if (compiledValueMap.TryGetValue(key, out var fromValue))
+                    cVal = fromValue;
+                var child = compiled.AddChild(key);
+                child.Value = cVal ?? string.Empty;
+            }
         }
 
         // SystemAttributes: always present when the template defines defaults; user
@@ -129,10 +136,9 @@ public sealed class VmatGenerator
             foreach (var (key, defaultValue) in shader.SystemAttributeDefaults)
             {
                 var child = attrs.AddChild(key);
-                if (systemAttributeOverrides is not null && systemAttributeOverrides.TryGetValue(key, out var ov) && !string.IsNullOrEmpty(ov))
-                    child.Value = ov;
-                else
-                    child.Value = defaultValue;
+                child.Value = systemAttributeOverrides is not null && systemAttributeOverrides.TryGetValue(key, out var ov) && !string.IsNullOrEmpty(ov)
+                    ? ov
+                    : defaultValue;
             }
             if (systemAttributeOverrides is not null)
             {
@@ -145,26 +151,26 @@ public sealed class VmatGenerator
             }
         }
 
-        // Attributes block: only emitted when the user explicitly enables at least one
-        // attribute flag, matching the workspace convention where attributes are rare.
-        if (enabledAttributeFlags is not null && shader.AttributeFlags.Count > 0)
+        // Attributes block: replayed verbatim from the template. Empty template
+        // attributes (the common case) suppress the block entirely.
+        if (shader.TemplateAttributes.Count > 0)
         {
             var attrs = root.AddChild("Attributes");
-            foreach (var flag in shader.AttributeFlags)
+            foreach (var attr in shader.TemplateAttributes)
             {
-                var c = attrs.AddChild(flag);
-                c.Value = enabledAttributeFlags.Contains(flag) ? "1" : "0";
+                var c = attrs.AddChild(attr.Key);
+                c.Value = attr.Value;
             }
         }
 
         return root;
     }
 
+    /// <inheritdoc/>
     public string Render(
         ShaderTemplate shader,
         IDictionary<string, string> values,
         IEnumerable<string>? enabledFeatureFlags = null,
-        IEnumerable<string>? enabledAttributeFlags = null,
         IDictionary<string, string>? systemAttributeOverrides = null,
         IDictionary<string, string>? compiledTextureOverrides = null)
     {
@@ -172,7 +178,6 @@ public sealed class VmatGenerator
             shader,
             values,
             enabledFeatureFlags,
-            enabledAttributeFlags,
             systemAttributeOverrides,
             compiledTextureOverrides);
         return doc.Serialize();
@@ -194,8 +199,7 @@ public sealed class VmatGenerator
 
     private static string NormalizeVector(string raw)
     {
-        if (Vector4.TryParse(raw, out var v)) return v.ToString();
-        return raw;
+        return Vector4.TryParse(raw, out var v) ? v.ToString() : raw;
     }
 
     private static IEnumerable<string> MapToCompiledKey(string shader, string paramKey)
@@ -220,10 +224,7 @@ public sealed class VmatGenerator
             if (digitsEnd == digitsStart || digitsEnd >= name.Length) yield break;
             var layerNumber = name[digitsStart..digitsEnd];
             var channel = name[digitsEnd..];
-            if (int.TryParse(layerNumber, out var n) && n > 1)
-                yield return $"g_tLayer{n - 1}{channel}";
-            else
-                yield return $"g_t{channel}";
+            yield return int.TryParse(layerNumber, out var n) && n > 1 ? $"g_tLayer{n - 1}{channel}" : $"g_t{channel}";
         }
         else
         {

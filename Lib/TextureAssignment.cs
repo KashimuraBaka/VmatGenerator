@@ -154,8 +154,8 @@ public sealed class TextureAssignResult
 ///   <see cref="TextureConflict"/>；<b>冲突绝不覆盖已写入的值</b>。</description></item>
 ///   <item><description>胜者按 <see cref="TextureRoleResolver.Resolve"/> 解析出参数键；
 ///   解析不出（含 P5 多候选并列）时该文件<b>不写入</b>，解析结果记入
-///   <see cref="TextureRoleResolution.UnresolvedRoles"/>，GUI 可直接展示
-///   <see cref="TextureRoleResolution.Diagnostic"/>。</description></item>
+///   <see cref="TextureAssignResult.UnresolvedRoles"/>，GUI 可直接展示
+///   <see cref="TextureRoleResolution.DiagnosticText"/>。</description></item>
 ///   <item><description>用 <see cref="TexturePathRules.ToVmatPath"/> 换算最终写入值（§6.6）。</description></item>
 /// </list>
 ///
@@ -168,7 +168,7 @@ public static class TextureAssigner
     /// 规划一批贴图文件到目标着色器参数键的分配方案。
     /// </summary>
     /// <param name="shader">目标着色器模板；为 <c>null</c> 时全部命中规则的文件都会落入
-    /// <see cref="TextureRoleResolution.UnresolvedRoles"/>，不会产生任何分配。</param>
+    /// <see cref="TextureAssignResult.UnresolvedRoles"/>，不会产生任何分配。</param>
     /// <param name="textureFilePaths">待分配的贴图文件路径集合；允许含非贴图条目（会被忽略并计入未命中）。</param>
     /// <param name="rules">后缀规则表；为 <c>null</c> 时所有文件都进入未命中列表。</param>
     /// <param name="textureRoot">贴图根目录；为空 / 不存在时按 §6.6 原样写回绝对路径。</param>
@@ -232,7 +232,7 @@ public static class TextureAssigner
 
             if (!byRole.TryGetValue(match.Role, out var bucket))
             {
-                bucket = new List<GroupBucket>();
+                bucket = [];
                 byRole[match.Role] = bucket;
                 roleOrder.Add(match.Role);
             }
@@ -313,8 +313,7 @@ public static class TextureAssigner
         if (a.MatchedSuffixLength != b.MatchedSuffixLength) return a.MatchedSuffixLength > b.MatchedSuffixLength;
         if (a.IsWholeNameMatch != b.IsWholeNameMatch) return a.IsWholeNameMatch;
         var byName = string.CompareOrdinal(a.FileNameWithoutExtension, b.FileNameWithoutExtension);
-        if (byName != 0) return byName < 0;
-        return string.CompareOrdinal(a.FilePath, b.FilePath) < 0;
+        return byName != 0 ? byName < 0 : string.CompareOrdinal(a.FilePath, b.FilePath) < 0;
     }
 
     /// <summary>
@@ -325,9 +324,7 @@ public static class TextureAssigner
     private static TextureRole? LookupOverride(
         IReadOnlyDictionary<string, TextureRole>? overrides, string path)
     {
-        if (overrides is null || overrides.Count == 0) return null;
-        if (!overrides.TryGetValue(path, out var role)) return null;
-        return role;
+        return overrides is null || overrides.Count == 0 ? null : !overrides.TryGetValue(path, out var role) ? null : role;
     }
 
     /// <summary>去掉空白项并按完整路径去重（大小写按平台语义），保持输入顺序。</summary>

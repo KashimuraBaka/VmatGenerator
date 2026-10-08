@@ -214,7 +214,7 @@ public static class RegistrySettingsStore
         settings = VmatGeneratorSettingsStore.Sanitize(settings, out var fixedBySanitize);
         bad.AddRange(fixedBySanitize);
 
-        repaired = bad.Distinct(StringComparer.Ordinal).ToArray();
+        repaired = [.. bad.Distinct(StringComparer.Ordinal)];
         return settings;
     }
 

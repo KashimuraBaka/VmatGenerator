@@ -1,9 +1,9 @@
 namespace Lib;
 
 /// <summary>一次 <see cref="VmatBuildService.Build"/> 的进度快照。</summary>
-/// <param name="Index">已完成组数。</param>
-/// <param name="Total">总组数。</param>
-/// <param name="Message">面向用户的一行说明（可直接显示）。</param>
+/// <param name="index">已完成组数。</param>
+/// <param name="total">总组数。</param>
+/// <param name="message">面向用户的一行说明（可直接显示）。</param>
 public sealed class VmatBuildProgress(int index, int total, string message)
 {
     /// <summary>已完成组数。</summary>
@@ -39,7 +39,7 @@ public sealed class VmatBuildGroup
     {
         Directory = directory;
         BaseName = baseName;
-        _assignments = new List<TextureAssignment>(assignments);
+        _assignments = [.. assignments];
     }
 
     /// <summary>贴图所在目录；为空表示与进程工作目录同层。</summary>
@@ -150,8 +150,8 @@ public static class VmatBuildService
     /// <summary>
     /// 执行一次生成。
     /// </summary>
-    /// <param name="shader">目标着色器；为 <c>null</c> 时不会有任何分配，所有文件都落进
-    /// <paramref name="unassignedFiles"/> 语义的报告里。</param>
+    /// <param name="shader">目标着色器；为 <c>null</c> 时不会有任何分配，所有文件都会
+    /// 落进 <see cref="VmatBuildResult.UnassignedFiles"/> 语义的报告里。</param>
     /// <param name="textureFilePaths">用户提供的文件 / 文件夹路径；非贴图条目会被忽略并计入未命中。</param>
     /// <param name="rules">后缀规则表。</param>
     /// <param name="textureRoot">贴图根目录；为空时按 <see cref="TexturePathRules"/> 原样写绝对路径。</param>
@@ -224,10 +224,7 @@ public static class VmatBuildService
             var text = generator.Render(
                 shader,
                 values,
-                enabledFeatureFlags: shader.FeatureFlags,
-                enabledAttributeFlags: shader.AttributeFlags,
-                systemAttributeOverrides: shader.SystemAttributeDefaults.ToDictionary(kv => kv.Key, kv => kv.Value),
-                compiledTextureOverrides: shader.CompiledTextureKeys.ToDictionary(k => k, _ => string.Empty));
+                systemAttributeOverrides: shader.SystemAttributeDefaults.ToDictionary(kv => kv.Key, kv => kv.Value));
 
             File.WriteAllText(group.TargetPath, text);
             written.Add(group.TargetPath);
@@ -257,6 +254,11 @@ public static class VmatBuildService
     /// 就是第三步会写出的内容——不存在「预览与实际不一致」这种最伤信任的偏差。
     /// <paramref name="projectRoot"/> 只决定写到哪里，不影响文本内容。
     /// </remarks>
+    /// <param name="shader"></param>
+    /// <param name="textureFilePaths"></param>
+    /// <param name="rules"></param>
+    /// <param name="assetsRoot"></param>
+    /// <param name="projectRoot"></param>
     /// <param name="roleOverrides">逐文件手动槽位覆盖，见 <see cref="TextureAssigner.Assign"/>。</param>
     public static string Preview(
         ShaderTemplate shader,
@@ -280,10 +282,18 @@ public static class VmatBuildService
     /// 本方法尊重 <paramref name="plan"/> 里已经确定的「哪个文件名归哪份材质」，
     /// 供向导第二步的手动指定生效。
     /// </remarks>
-    /// <param name="plan">材质名 → 该材质包含的贴图文件路径。</param>
+    /// <param name="shader"></param>
+    /// <param name="plan">材质名 → 该材质包含的贴图文件路径。键可用
+    /// 「相对目录 + <c>'\0'</c> + 材质名」区分<b>不同文件夹里的同名材质</b>：
+    /// 它们会各自写进自己镜像出来的输出目录，而不是被并成一个材质；
+    /// 写出的文件名只取分隔符之后的部分。</param>
+    /// <param name="rules"></param>
     /// <param name="assetsRoot">贴图根目录；<c>.vmat</c> 内写相对它的路径。</param>
     /// <param name="projectRoot">.vmat 输出根目录；输出会镜像贴图相对资产根的子目录。</param>
-    /// <param name="overwriteExisting">同名 .vmat 已存在时是否覆盖；默认 <c>false</c>。</param>
+    /// <param name="progress"></param>
+    /// <param name="cancellationToken"></param>
+    /// <param name="overwriteExisting">同名 .vmat 已存在时是否覆盖；默认 <c>false</c>，
+    /// 向导第三步生成时传 <c>true</c>：直接覆盖，不再跳过。</param>
     /// <param name="roleOverrides">逐文件手动槽位覆盖，见 <see cref="TextureAssigner.Assign"/>。</param>
     public static VmatBuildResult BuildByGroup(
         ShaderTemplate shader,
@@ -309,11 +319,17 @@ public static class VmatBuildService
         var totalFiles = 0;
         var index = 0;
 
-        foreach (var (name, files) in plan)
+        foreach (var (planKey, files) in plan)
         {
             cancellationToken.ThrowIfCancellationRequested();
             index++;
             totalFiles += files.Count;
+
+            // 计划键可能带「相对目录 + \0」前缀：不同文件夹里的同名材质（concrete\wall
+            // 与 floor\wall）是两个独立材质，调用方用它来阻止跨文件夹合并。
+            // 真正写出的文件名只取分隔符之后的材质名；\0 是文件名非法字符，真实名字里不会出现。
+            var sep = planKey.IndexOf('\0');
+            var name = sep >= 0 ? planKey[(sep + 1)..] : planKey;
 
             // 冲突在「单个材质内部」裁定，分组之间互不影响。
             var assign = TextureAssigner.Assign(shader, files, ruleList, assetsRoot, roleOverrides);
@@ -390,14 +406,12 @@ public static class VmatBuildService
         {
             var textureDir = Path.GetDirectoryName(baseColorFilePath) ?? string.Empty;
             var relative = Path.GetRelativePath(assetsRoot, textureDir);
-            if (relative is "." or ".."
+            return relative is "." or ".."
                 || relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal)
                 || relative.StartsWith(".." + Path.AltDirectorySeparatorChar, StringComparison.Ordinal)
-                || Path.IsPathRooted(relative))
-            {
-                return root;
-            }
-            return Path.Combine(root, relative);
+                || Path.IsPathRooted(relative)
+                ? root
+                : Path.Combine(root, relative);
         }
         catch (ArgumentException)
         {
@@ -416,10 +430,7 @@ public static class VmatBuildService
         return new VmatGenerator().Render(
             shader,
             values,
-            enabledFeatureFlags: shader.FeatureFlags,
-            enabledAttributeFlags: shader.AttributeFlags,
-            systemAttributeOverrides: shader.SystemAttributeDefaults.ToDictionary(kv => kv.Key, kv => kv.Value),
-            compiledTextureOverrides: shader.CompiledTextureKeys.ToDictionary(k => k, _ => string.Empty));
+            systemAttributeOverrides: shader.SystemAttributeDefaults.ToDictionary(kv => kv.Key, kv => kv.Value));
     }
 
     /// <summary>
@@ -435,7 +446,7 @@ public static class VmatBuildService
         out List<string> unassigned,
         out int totalFiles)
     {
-        unassigned = new List<string>();
+        unassigned = [];
         var order = new List<string>();
         var map = new Dictionary<string, Bucket>(StringComparer.OrdinalIgnoreCase);
         totalFiles = 0;
@@ -465,14 +476,14 @@ public static class VmatBuildService
             var key = directory + "|" + baseName;
             if (!map.TryGetValue(key, out var bucket))
             {
-                bucket = new Bucket(directory, baseName, new List<string>());
+                bucket = new Bucket(directory, baseName, []);
                 map[key] = bucket;
                 order.Add(key);
             }
             bucket.Files.Add(path);
         }
 
-        return order.Select(k => map[k]).ToList();
+        return [.. order.Select(k => map[k])];
     }
 
     /// <summary>

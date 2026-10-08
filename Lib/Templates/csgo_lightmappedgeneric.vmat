@@ -1,0 +1,57 @@
+Layer0
+{
+	shader "csgo_lightmappedgeneric.vfx"
+
+	//---- 2-Sided Rendering ----
+	F_DONT_FLIP_BACKFACE_NORMALS 0
+	F_RENDER_BACKFACES 0
+
+	//---- Indirect/Cubemap Specular - S1 $envmap ----
+	F_SPECULAR_INDIRECT 0
+
+	//---- PBR ----
+	F_METALNESS_TEXTURE 0
+	F_NO_SPECULAR_AT_FULL_ROUGHNESS 0
+
+	//---- Per-Instance Tint Mask ----
+	F_TINT_MASK 0
+
+	//---- Shadows ----
+	F_DO_NOT_CAST_SHADOWS 0
+
+	//---- Translucent ----
+	F_ALPHA_TEST 0
+
+	//---- Z-Buffering ----
+	F_DISABLE_Z_BUFFERING 0
+
+	//---- Z-Prepass ----
+	F_DISABLE_Z_PREPASS 0
+
+	//---- Color ----
+	g_flModelTintAmount "1.000"
+	g_flVertexColorOpacityScale "1.000"
+	g_vColorTint "[1.000000 1.000000 1.000000 0.000000]"
+
+	//---- Fog ----
+	g_bFogEnabled "1"
+
+	//---- Lighting ----
+	g_flMetalness "0.000"
+
+	//---- PBR 1 ----
+	g_vLayer1Tint "[1.000000 1.000000 1.000000 0.000000]"
+	TextureLayer1AmbientOcclusion ""
+	TextureLayer1Color ""
+	TextureLayer1Normal ""
+	TextureLayer1Roughness ""
+	TextureLayer1Translucency ""
+
+	//---- Texture Address Mode ----
+	g_nTextureAddressModeU "0" // Wrap
+	g_nTextureAddressModeV "0" // Wrap
+
+	//---- Translucent ----
+	g_flAlphaTestReference "0.010"
+	g_flAntiAliasedEdgeStrength "1.000"
+}

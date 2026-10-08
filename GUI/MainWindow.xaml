@@ -601,7 +601,7 @@
                 <StackPanel VerticalAlignment="Center">
                     <TextBlock FontWeight="SemiBold" FontSize="14" Text="第三步 · 生成" />
                     <TextBlock Margin="0,4,0,18" FontSize="11" Opacity="0.7" TextWrapping="Wrap"
-                               Text="按第二步确认的归属写出 .vmat。同名文件已存在时会跳过并列出，不会覆盖。生成期间界面不会卡死，可随时取消。" />
+                               Text="按第二步确认的归属写出 .vmat。同名文件已存在时直接覆盖。生成期间界面不会卡死，可随时取消。" />
                     <ProgressBar Height="10" Minimum="0" Maximum="100"
                                  Value="{Binding ProgressPercent, Mode=OneWay}" />
                     <TextBlock Margin="0,8,0,0" FontSize="12" Text="{Binding ProgressMessage}" />
@@ -666,7 +666,7 @@
                 <Button Margin="8,0,0,0" Padding="16,5" FontWeight="SemiBold" Content="开始生成"
                         IsEnabled="{Binding CanStartGenerate}"
                         Command="{Binding GenerateCommand}"
-                        ToolTip="按当前分组与规则表生成 .vmat；已存在的文件一律跳过不覆盖">
+                        ToolTip="按当前分组与规则表生成 .vmat；已存在的文件直接覆盖">
                     <!-- 只在第三步出现。生成是个不可轻率的写盘动作，
                          放在第一步、第二步就意味着用户还没看扫描结果就能直接落盘；
                          而「下一步」正是第三步的出口，两者互斥，所以这里和它用同一个条件。 -->

@@ -1,0 +1,137 @@
+Layer0
+{
+	shader "csgo_character.vfx"
+
+	//---- 2-Sided Rendering ----
+	F_DONT_FLIP_BACKFACE_NORMALS 0
+	F_RENDER_BACKFACES 0
+
+	//---- Decal Blend Mode ----
+	F_DECAL_BLEND_MODE 0
+
+	//---- Decal Texture ----
+	F_DECAL_TEXTURE 0
+
+	//---- Enable Patches ----
+	F_PATCHES 0
+
+	//---- PBR ----
+	F_ANISOTROPIC_GLOSS 0
+	F_ANISOTROPIC_HAIR 0
+	F_CLOTH_SHADING 0
+	F_RETRO_REFLECTIVE 0
+	F_SPHERICAL_PROJECTED_ANISOTROPIC_TANGENTS 0
+
+	//---- Per-Instance Tint Mask ----
+	F_TINT_MASK 0
+
+	//---- Shadows ----
+	F_DO_NOT_CAST_SHADOWS 0
+
+	//---- Skin ----
+	F_SUBSURFACE_SCATTERING 0
+
+	//---- Translucent ----
+	F_ALPHA_TEST 0
+
+	//---- Visibility ----
+	F_DISTANCE_CONTRAST_ADJUSTMENT 0
+
+	//---- Z-Buffering ----
+	F_DISABLE_Z_BUFFERING 0
+
+	//---- Z-Prepass ----
+	F_DISABLE_Z_PREPASS 0
+
+	//---- Ambient Occlusion ----
+	TextureAmbientOcclusion ""
+
+	//---- Color ----
+	g_bUseSecondaryUvForTintMask "0"
+	g_flModelTintAmount "1.000"
+	g_flTexCoordRotation "0.000"
+	g_nScaleTexCoordUByModelScaleAxis "0" // None
+	g_nScaleTexCoordVByModelScaleAxis "0" // None
+	g_vColorTint "[1.000000 1.000000 1.000000 0.000000]"
+	g_vTexCoordCenter "[0.500 0.500]"
+	g_vTexCoordOffset "[0.000 0.000]"
+	g_vTexCoordScale "[1.000 1.000]"
+	g_vTexCoordScrollSpeed "[0.000 0.000]"
+	TextureColor ""
+	TextureTintMask ""
+
+	//---- Decal Texture ----
+	g_bUseSecondaryUvForDecal "1"
+	TextureDecal ""
+	TextureDecalTranslucency ""
+
+	//---- Fog ----
+	g_bFogEnabled "1"
+
+	//---- Lighting ----
+	g_flAmbientOcclusionMasking "0.400"
+	g_flHairGlossRoughnessScale "1.250"
+	g_flHairGlossShift "0.300"
+	g_flHairTransmission "0.300"
+	g_flSheenScale "0.667"
+	g_flSheenTintColor "[1.000000 1.000000 1.000000 0.000000]"
+	g_vSphericalAnisotropyAngle "0.000"
+	g_vSphericalAnisotropyPole "[0.000 0.000 1.000]"
+	TextureCloth "[0.000000 0.000000 0.000000 0.000000]"
+	TextureHairMask "[1.000000 1.000000 1.000000 0.000000]"
+	TextureMetalness ""
+	TextureRetroReflectiveMask ""
+	TextureRimMask "[1.000000 1.000000 1.000000 0.000000]"
+	TextureRoughness ""
+
+	//---- Normal Map ----
+	TextureNormal ""
+
+	//---- Patch0 ----
+	g_bEnablePatch0 "0"
+	g_flPatch0BackingScale "0.000"
+	g_flPatch0Rotation "0.000"
+	g_flPatch0Scale "0.000"
+	g_flPatch0Squash "1.000"
+	g_vPatch0Offset "[0.000 0.000]"
+	TextureColorPatch0 ""
+	TexturePatch0Backing ""
+
+	//---- Patch1 ----
+	g_bEnablePatch1 "0"
+	g_flPatch1BackingScale "0.000"
+	g_flPatch1Rotation "0.000"
+	g_flPatch1Scale "0.000"
+	g_flPatch1Squash "1.000"
+	g_vPatch1Offset "[0.000 0.000]"
+	TextureColorPatch1 ""
+	TexturePatch1Backing ""
+
+	//---- Patch2 ----
+	g_bEnablePatch2 "0"
+	g_flPatch2BackingScale "0.000"
+	g_flPatch2Rotation "0.000"
+	g_flPatch2Scale "0.000"
+	g_flPatch2Squash "1.000"
+	g_vPatch2Offset "[0.000 0.000]"
+	TextureColorPatch2 ""
+	TexturePatch2Backing ""
+
+	//---- Skin ----
+	g_flCurvatureScale "1.000"
+	g_vNormalSoftness "[1.000000 0.301961 0.000000 0.000000]"
+	TextureDiffuseFalloff ""
+	TextureSssMask ""
+
+	//---- Texture Address Mode ----
+	g_nTextureAddressModeU "0" // Wrap
+	g_nTextureAddressModeV "0" // Wrap
+
+	//---- Translucent ----
+	g_flAlphaTestReference "0.500"
+	g_flAntiAliasedEdgeStrength "1.000"
+	TextureTranslucency ""
+
+	//---- Visibility ----
+	g_fDistanceContrastExposure "0.600"
+}
