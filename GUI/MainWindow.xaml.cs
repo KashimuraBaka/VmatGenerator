@@ -6,7 +6,6 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using GUI.Diagnostics;
 using GUI.ViewModels;
-using Lib;
 
 namespace GUI;
 
@@ -55,9 +54,9 @@ public partial class MainWindow : Window
     private void OnSourceInitializedCloakStart(object? sender, EventArgs e)
     {
         SourceInitialized -= OnSourceInitializedCloakStart;
+        var hwnd = new WindowInteropHelper(this).Handle;
         try
         {
-            var hwnd = new WindowInteropHelper(this).Handle;
             var cloak = 1; // 1 = 隐身，0 = 现身
             if (DwmSetWindowAttribute(hwnd, DwmwaCloak, ref cloak, sizeof(int)) == 0)
             {
@@ -68,6 +67,18 @@ public partial class MainWindow : Window
         {
             // 装饰性问题：记录即可，绝不影响启动。
             ErrorLog.Write(ErrorSeverity.Warning, "启动白闪规避（cloak）", nameof(MainWindow), ex);
+        }
+
+        try
+        {
+            // 去掉系统标题栏后，DWM 不再自动给窗口画圆角；显式请求「圆角」，
+            // 让无边框窗口与 Win11 普通窗口观感一致（Win10 不认此属性，静默失败即可）。
+            var round = 2; // DWMWCP_ROUND
+            DwmSetWindowAttribute(hwnd, DwmwaWindowCornerPreference, ref round, sizeof(int));
+        }
+        catch (Exception ex)
+        {
+            ErrorLog.Write(ErrorSeverity.Warning, "窗口圆角", nameof(MainWindow), ex);
         }
     }
 
@@ -93,11 +104,125 @@ public partial class MainWindow : Window
     /// <summary>DWMWA_CLOAK（dwmapi.h）：13。</summary>
     private const int DwmwaCloak = 13;
 
+    /// <summary>DWMWA_WINDOW_CORNER_PREFERENCE（dwmapi.h，Win11 起）：33。</summary>
+    private const int DwmwaWindowCornerPreference = 33;
+
+    // ─── 最大化边界修正 ────────────────────────────────────────────────────
+    //
+    // WindowStyle=None + WindowChrome 的经典坑：系统默认按「整块显示器」最大化
+    // 无边框窗口，会把任务栏整个盖住。标准做法是自己应答 WM_GETMINMAXINFO，
+    // 把最大化矩形改写为所在显示器的工作区（MahApps.Metro、WPF UI 等自绘标题栏
+    // 组件都是这么处理的）。坐标全部取当前显示器的物理像素增量，天然适配 DPI 与
+    // 多显示器；Win+↑ / 贴边分屏 / 拖动最大化同样走这条消息，一并被修正。
+
+    /// <summary>WM_GETMINMAXINFO。</summary>
+    private const int WmGetMinMaxInfo = 0x0024;
+
+    /// <summary>MONITOR_DEFAULTTONEAREST。</summary>
+    private const int MonitorDefaultToNearest = 0x00000002;
+
+    /// <inheritdoc/>
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        if (HwndSource.FromHwnd(new WindowInteropHelper(this).Handle) is { } source)
+        {
+            source.AddHook(MaximizeBoundsHook);
+        }
+    }
+
+    /// <summary>把最大化矩形限制到显示器工作区（详见 <see cref="WmGetMinMaxInfo"/> 注释）。</summary>
+    private static IntPtr MaximizeBoundsHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        if (msg != WmGetMinMaxInfo || lParam == IntPtr.Zero)
+        {
+            return IntPtr.Zero;
+        }
+
+        try
+        {
+            var monitor = MonitorFromWindow(hwnd, MonitorDefaultToNearest);
+            if (monitor == IntPtr.Zero)
+            {
+                return IntPtr.Zero;
+            }
+
+            var info = new MONITORINFOEX();
+            info.CbSize = Marshal.SizeOf<MONITORINFOEX>();
+            if (!GetMonitorInfo(monitor, ref info))
+            {
+                return IntPtr.Zero;
+            }
+
+            // 直接改写系统即将采用的结构体；不拦截消息，后续默认处理照旧。
+            var mmi = Marshal.PtrToStructure<MinMaxInfo>(lParam);
+            mmi.MaxPositionX = info.WorkLeft - info.MonLeft;
+            mmi.MaxPositionY = info.WorkTop - info.MonTop;
+            mmi.MaxSizeX = info.WorkRight - info.WorkLeft;
+            mmi.MaxSizeY = info.WorkBottom - info.WorkTop;
+            Marshal.StructureToPtr(mmi, lParam, true);
+        }
+        catch (Exception ex)
+        {
+            // 失败的最坏结果是最大化盖住任务栏（原生缺陷回退），不影响其余窗口行为。
+            ErrorLog.Write(ErrorSeverity.Warning, "最大化边界修正", nameof(MainWindow), ex);
+        }
+
+        return IntPtr.Zero;
+    }
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr MonitorFromWindow(IntPtr hwnd, int flags);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFOEX lpmi);
+
+    /// <summary>WINRECT x 2 + POINT x 4（MINMAXINFO，Winuser.h）；仅取用到的前六个字段，其余原样保留。</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MinMaxInfo
+    {
+        public int ReservedX, ReservedY;
+        public int MaxSizeX, MaxSizeY;
+        public int MaxPositionX, MaxPositionY;
+        public int MinTrackSizeX, MinTrackSizeY;
+        public int MaxTrackSizeX, MaxTrackSizeY;
+    }
+
+    /// <summary>MONITORINFOEXW（Winuser.h）；szDevice 保留为定长 32 字符占位。</summary>
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct MONITORINFOEX
+    {
+        public int CbSize;
+        public int MonLeft, MonTop, MonRight, MonBottom;
+        public int WorkLeft, WorkTop, WorkRight, WorkBottom;
+        public uint Flags;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
+        public string DeviceName;
+    }
+
     [DllImport("dwmapi.dll", PreserveSig = true)]
     private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int attributeValue, int attributeSize);
 
     /// <summary>主 ViewModel（由 XAML 建立，这里只作类型化入口）。</summary>
     public MainViewModel ViewModel => (MainViewModel)DataContext;
+
+    // ─── 自绘标题栏按钮 ────────────────────────────────────────────────────
+    // WindowStyle=None 后系统按钮消失，三个动作改由标题栏右上角的自绘按钮触发。
+    // WindowChrome 仍负责边缘缩放、贴边分屏与 Win+方向键，那些系统路径直接改
+    // WindowState，不经过这里，因此最大化按钮的图标/提示用 XAML 绑定 WindowState，
+    // 这里只做最简单的状态切换，不需要任何消息钩子。
+
+    private void OnMinimizeClicked(object sender, RoutedEventArgs e) =>
+        ControlErrorRecorder.Guard("最小化窗口", sender, () => WindowState = WindowState.Minimized);
+
+    private void OnMaximizeRestoreClicked(object sender, RoutedEventArgs e) =>
+        ControlErrorRecorder.Guard("最大化/还原窗口", sender, () =>
+            WindowState = WindowState == WindowState.Maximized
+                ? WindowState.Normal
+                : WindowState.Maximized);
+
+    private void OnCloseClicked(object sender, RoutedEventArgs e) =>
+        ControlErrorRecorder.Guard("关闭窗口", sender, () => Close());
 
     /// <summary>错误发生时更新底栏角标（非阻塞，避免连续弹窗淹没界面）。</summary>
     private void OnErrorLogged(ErrorEntry entry)
@@ -167,7 +292,7 @@ public partial class MainWindow : Window
     /// <remarks>
     /// 一次拖拽中 <c>DragOver</c> 会连续触发几十次，因此这里只读取
     /// <see cref="DataFormats.FileDrop"/> 的存在性，不枚举内容、不调
-    /// <see cref="DropImportService.CanAccept"/>——后者要碰文件系统。
+    /// <see cref="Lib.DropImportService.CanAccept"/>——后者要碰文件系统。
     /// </remarks>
     private void OnWindowDragOver(object sender, DragEventArgs e) => ControlErrorRecorder.Guard("拖入生成来源", this, () =>
                                                                           {
@@ -215,63 +340,7 @@ public partial class MainWindow : Window
     /// <summary>点击步骤条跳到第三步；前两步没满足时不放行。</summary>
     private void OnStep3Clicked(object sender, MouseButtonEventArgs e) => ViewModel?.GoToStep3Command.Execute(null);
 
-
-    // ── 帮助菜单：诊断入口 ───────────────────────────────────────────────────
-
-    /// <summary>帮助 → 贴图后缀自检。</summary>
-    ///
-    /// <para>这是规格 §11 那 13 项契约（以及另外 18 项扩展用例）唯一的<b>永久可重跑入口</b>。
-    /// 旧主窗口删除后若不把它搬过来，规格里的自检清单就事实上无人能验证。</para>
-    ///
-    /// <para><b>安全性：</b><see cref="TextureAssignmentSelfTest.Run"/> 内部的全部文件用例都在
-    /// <c>Path.GetTempPath()</c> 下的独立沙箱中执行并在 finally 清理，
-    /// <b>不碰用户真实的配置</b>（注册表项
-    /// <c>HKEY_CURRENT_USER\SOFTWARE\Kashimura\VmatGenerator</c>），
-    /// 因此在已配置好规则的环境里点这一项也不会污染自己的配置。</para>
-    private void OnRunTextureSuffixSelfTest(object sender, RoutedEventArgs e) => ControlErrorRecorder.GuardWithDialog("贴图后缀自检", sender, () =>
-                                                                                      {
-                                                                                          var report = TextureAssignmentSelfTest.Run();
-
-                                                                                          // 逐条结果始终留档，这样用户报 bug 时可以直接给日志文件。
-                                                                                          ErrorLog.Info($"贴图后缀自检：{report.Summary()}", nameof(MainWindow));
-
-                                                                                          var body = report.Passed
-                                                                                              ? report.Summary()
-                                                                                                + "\n\n全部用例通过。本机设置未被改动（自检在临时目录中运行）。"
-                                                                                                + $"\n\n逐条结果已写入：\n{ErrorLog.LogFilePath}"
-                                                                                              : report.Summary() + "\n\n" + report.Describe()
-                                                                                                + $"\n\n逐条结果已写入：\n{ErrorLog.LogFilePath}";
-
-                                                                                          MessageBox.Show(
-                                                                                              body,
-                                                                                              report.Passed ? "贴图后缀自检：全部通过" : "贴图后缀自检：存在失败用例",
-                                                                                              MessageBoxButton.OK,
-                                                                                              report.Passed ? MessageBoxImage.Information : MessageBoxImage.Warning);
-                                                                                      });
-
-    /// <summary>帮助 → 打开错误日志（底栏错误角标同样走这里）。</summary>
+    /// <summary>底栏错误角标 → 打开错误日志窗口（帮助菜单已移除，这是它唯一的入口）。</summary>
     private void OnShowErrorLogClicked(object sender, RoutedEventArgs e) => ControlErrorRecorder.GuardWithDialog("打开错误日志窗口", sender,
             () => new ErrorLogWindow { Owner = this }.ShowDialog());
-
-    /// <summary>帮助 → 打开日志文件所在目录。</summary>
-    private void OnOpenLogFolderClicked(object sender, RoutedEventArgs e) => ControlErrorRecorder.GuardWithDialog("打开日志目录", sender, () =>
-                                                                                  {
-                                                                                      Process.Start(new ProcessStartInfo
-                                                                                      {
-                                                                                          FileName = ErrorLog.LogDirectory,
-                                                                                          UseShellExecute = true,
-                                                                                      });
-                                                                                  });
-
-    /// <summary>帮助 → 关于。</summary>
-    private void OnAboutClicked(object sender, RoutedEventArgs e) => ControlErrorRecorder.GuardWithDialog("显示关于对话框", sender, () =>
-                                                                              MessageBox.Show(
-                                                                                  "VMAT 生成器 — 基于 WPF / .NET 10 Fluent UI 的 Source 2 贴图→.vmat 快速导航生成器。\n\n" +
-                                                                                  "由 Lib + CommunityToolkit.Mvvm 构建，\n" +
-                                                                                  "解析采用 ValveKeyValue 三方库，单文件 framework-dependent 发布。\n" +
-                                                                                  "界面主题使用 .NET 10 Desktop Runtime 内置的 Fluent 资源。\n\n" +
-                                                                                  $"错误日志：{ErrorLog.LogFilePath}",
-                                                                                  "关于 VMAT 生成器",
-                                                                                  MessageBoxButton.OK,
-                                                                                  MessageBoxImage.Information));
 }

@@ -10,6 +10,8 @@
         MinWidth="1060" MinHeight="820"
         Background="{DynamicResource ApplicationBackgroundBrush}"
         WindowStartupLocation="CenterScreen"
+        WindowStyle="None"
+        ResizeMode="CanResize"
         AllowDrop="True"
         DragOver="OnWindowDragOver"
         DragEnter="OnWindowDragOver"
@@ -19,6 +21,21 @@
     <Window.DataContext>
         <vm:MainViewModel />
     </Window.DataContext>
+    <!--
+        无边框自绘标题栏：WindowStyle=None 之后用 WindowChrome 把「拖动 / 边缘缩放 /
+        Win11 原生圆角与阴影 / 贴边分屏 / Win+方向键」这些系统行为全部保留下来，
+        只去掉系统画的标题栏本身。CaptionHeight=40 声明顶部 40px 是可拖动的标题区，
+        其上的可交互控件（三个按钮）需要 WindowChrome.IsHitTestVisibleInChrome=True
+        才会从「拖动区」里豁免出来；其余空白处仍可拖动窗口。
+        方案即 MS 文档推荐做法：https://learn.microsoft.com/dotnet/desktop/wpf/window-customization
+    -->
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="40"
+                      ResizeBorderThickness="6"
+                      CornerRadius="0"
+                      GlassFrameThickness="1"
+                      UseAeroCaptionButtons="False" />
+    </WindowChrome.WindowChrome>
     <Window.Resources>
         <!-- 所有单元格内容统一垂直 + 水平居中。
              「后缀名」是编辑框、「语义槽位」是下拉框，二者默认会纵向拉伸到整行高度；
@@ -81,19 +98,112 @@
                 </DataTrigger>
             </Style.Triggers>
         </Style>
+
+        <!-- ─── 自绘标题栏按钮 ──────────────────────────────────────────────
+             三个按钮共用一套模板：整块矩形、图标居中、无系统边框。悬停/按下状态
+             用主题资源（跟随浅色 / 深色），关闭按钮悬停用 Win11 同款红色并转白字。
+             图标来自系统自带的 Segoe Fluent Icons（老系统回退 Segoe MDL2 Assets）。 -->
+        <Style x:Key="CaptionButtonStyle" TargetType="Button">
+            <Setter Property="Width" Value="46" />
+            <Setter Property="Height" Value="40" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+            <Setter Property="FontFamily" Value="Segoe Fluent Icons, Segoe MDL2 Assets" />
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="WindowChrome.IsHitTestVisibleInChrome" Value="True" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Host" Background="{TemplateBinding Background}"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Host" Property="Background"
+                                        Value="{DynamicResource SubtleFillColorTertiaryBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Host" Property="Background"
+                                        Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
+                                <Setter Property="Opacity" Value="0.85" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="CloseCaptionButtonStyle" TargetType="Button" BasedOn="{StaticResource CaptionButtonStyle}">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Host" Background="{TemplateBinding Background}"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <!-- Win11 关闭按钮同款：悬停变红底白字，按下更深一档。 -->
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Host" Property="Background" Value="#FFC42B1C" />
+                                <Setter Property="Foreground" Value="#FFFFFFFF" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Host" Property="Background" Value="#FFC83B2C" />
+                                <Setter Property="Foreground" Value="#FFFFFFFF" />
+                                <Setter Property="Opacity" Value="0.9" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <!-- 最大化按钮的图标 / 提示 / 无障碍名跟随窗口状态切换（最大化后显示「还原」双框图标）。
+             默认图标也放在 Style 里：若写在元素属性上，本地值优先级高于 Style 触发器，
+             状态切换就会被静默吃掉。 -->
+        <Style x:Key="MaximizeCaptionButtonStyle" TargetType="Button" BasedOn="{StaticResource CaptionButtonStyle}">
+            <Setter Property="Content" Value="&#xE922;" />
+            <Setter Property="ToolTip" Value="最大化" />
+            <Setter Property="AutomationProperties.Name" Value="最大化" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding WindowState, RelativeSource={RelativeSource AncestorType=Window}}"
+                             Value="Maximized">
+                    <Setter Property="Content" Value="&#xE923;" />
+                    <Setter Property="ToolTip" Value="还原" />
+                    <Setter Property="AutomationProperties.Name" Value="还原" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
     </Window.Resources>
     <DockPanel>
-        <!-- 材质树/参数编辑器已随旧主窗口删除；这几项诊断入口是自检与日志唯一的 UI 入口，予以保留。 -->
-        <Menu DockPanel.Dock="Top">
-            <MenuItem Header="帮助(_H)">
-                <MenuItem Header="贴图后缀自检" Click="OnRunTextureSuffixSelfTest"
-                          ToolTip="在临时目录里重跑后缀解析契约用例，不改动本机配置" />
-                <MenuItem Header="错误日志…" Click="OnShowErrorLogClicked" />
-                <MenuItem Header="打开日志目录" Click="OnOpenLogFolderClicked" />
-                <Separator />
-                <MenuItem Header="关于 VmatGenerator" Click="OnAboutClicked" />
-            </MenuItem>
-        </Menu>
+        <!-- ─── 自绘标题栏 ──────────────────────────────────────────────────
+             替代系统标题栏（WindowStyle=None + WindowChrome）。整行高 40px 落在
+             CaptionHeight 内 → 空白处可直接拖动窗口；右侧三个按钮声明了
+             IsHitTestVisibleInChrome，从拖动区豁免、正常响应点击。 -->
+        <Grid DockPanel.Dock="Top" Height="40" Background="Transparent">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />      <!-- 标题（可拖动区） -->
+                <ColumnDefinition Width="Auto" />   <!-- 窗口按钮 -->
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Text="VmatGenerator · 贴图快速导航"
+                       Margin="12,0,0,0"
+                       FontSize="{DynamicResource CaptionTextBlockFontSize}"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                       HorizontalAlignment="Left" VerticalAlignment="Center" />
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top"
+                        WindowChrome.IsHitTestVisibleInChrome="True">
+                <Button Style="{StaticResource CaptionButtonStyle}" Content="&#xE921;"
+                        ToolTip="最小化" Click="OnMinimizeClicked"
+                        AutomationProperties.Name="最小化" />
+                <!-- 图标 / 提示 / 无障碍名都在 MaximizeCaptionButtonStyle 内定义，触发器才能切换。 -->
+                <Button x:Name="MaximizeButton" Style="{StaticResource MaximizeCaptionButtonStyle}"
+                        Click="OnMaximizeRestoreClicked" />
+                <Button Style="{StaticResource CloseCaptionButtonStyle}" Content="&#xE8BB;"
+                        ToolTip="关闭" Click="OnCloseClicked"
+                        AutomationProperties.Name="关闭" />
+            </StackPanel>
+        </Grid>
         <Grid Margin="12">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />   <!-- 步骤条 -->
